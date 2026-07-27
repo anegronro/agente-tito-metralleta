@@ -5,14 +5,19 @@
     <key>Label</key>
     <string>com.tito.watchlist-sync</string>
 
+    <!-- NO se invoca /bin/bash directamente: no tiene Acceso a Disco Completo y
+         launchd no puede leer el guion desde ~/Desktop (exit 126,
+         "Operation not permitted"). Este intérprete de uv sí lo tiene; el
+         lanzador lee el .sh y se lo pasa a bash por STDIN. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/bash</string>
-        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/sync-watchlist.sh</string>
+        <string>/Users/angel/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12</string>
+        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/run-watchlist-sync.py</string>
     </array>
 
-    <key>WorkingDirectory</key>
-    <string>/Users/angel/Desktop/agente-tito-metralleta/web</string>
+    <!-- Sin WorkingDirectory: launchd tampoco podía hacer chdir al Desktop
+         ("getcwd: cannot access parent directories"). El cwd lo fija el
+         lanzador, que sí tiene permiso. -->
 
     <!-- Cada 15 min. Con la cola vacia o el servidor apagado el guion sale en
          silencio (exit 0) sin invocar al modelo: coste cero en los pases en vacio. -->

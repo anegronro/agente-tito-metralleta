@@ -30,7 +30,10 @@ export PATH
 API="http://localhost:3000/api/watchlist"
 BROKER="robinhood"
 MAX_POR_PASE=10
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Normalmente se deduce del propio archivo, pero cuando el guion llega por
+# STDIN (ver run-watchlist-sync.py) `BASH_SOURCE` viene vacío y hay que
+# recibir la ruta por entorno.
+DIR="${TITO_WEB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOG="$DIR/data/sync-log.jsonl"
 
 registrar() { # registrar <evento> <detalle-json>
