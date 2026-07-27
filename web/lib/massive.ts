@@ -199,7 +199,12 @@ export async function fetchDailyBars(ticker: string, days = 365): Promise<DailyB
     `/v2/aggs/ticker/${encodeURIComponent(clean)}/range/1/day/` +
     `${toDateStr(from.getTime())}/${toDateStr(to.getTime())}` +
     `?adjusted=true&sort=asc&limit=500`;
-  const json = await getJson<{ results?: AggBar[] }>(path).catch(() => null);
+  // NO se traga el error a propósito. Antes había un `.catch(() => null)` aquí que
+  // convertía cualquier fallo —429 por límite de plan, sobre todo— en un array
+  // vacío devuelto con HTTP 200. El cliente lo tomaba por bueno, `gex` moría en su
+  // guarda de `bars.length === 0` y la app se quedaba "Armando la lectura" para
+  // siempre, sin un solo mensaje. Un fallo tiene que verse.
+  const json = await getJson<{ results?: AggBar[] }>(path);
   const bars = json?.results ?? [];
   return bars.map((b) => ({
     time: toDateStr(b.t),
@@ -224,7 +229,8 @@ export async function fetchBars(
     `/v2/aggs/ticker/${encodeURIComponent(clean)}/range/${multiplier}/${timespan}/` +
     `${toDateStr(from.getTime())}/${toDateStr(to.getTime())}` +
     `?adjusted=true&sort=asc&limit=50000`;
-  const json = await getJson<{ results?: AggBar[] }>(path).catch(() => null);
+  // Mismo criterio que fetchDailyBars: los fallos se propagan, no se silencian.
+  const json = await getJson<{ results?: AggBar[] }>(path);
   const bars = json?.results ?? [];
   return bars.map((b) => ({
     time: Math.floor(b.t / 1000),

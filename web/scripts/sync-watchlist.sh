@@ -17,7 +17,15 @@
 set -uo pipefail
 
 # launchd arranca con un PATH mínimo que no incluye ~/.local/bin, donde vive `claude`.
+# Se añaden también los bin de nvm: si `claude` se instaló con `npm i -g` bajo nvm, NO
+# cae en ~/.local/bin sino en ~/.nvm/versions/node/<version>/bin, y sin esto launchd
+# falla con "command not found" en cada pase.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+for _nvmbin in "$HOME"/.nvm/versions/node/*/bin; do
+  [ -d "$_nvmbin" ] && PATH="$PATH:$_nvmbin"
+done
+unset _nvmbin
+export PATH
 
 API="http://localhost:3000/api/watchlist"
 BROKER="robinhood"

@@ -4,7 +4,7 @@
 // El saldo NO llega aquí: la ruta devuelve candidatos con métricas y la
 // asequibilidad se calcula en el cliente con tito.risk.* de localStorage.
 
-import { fetchWheelChain } from "@/lib/massive";
+import { fetchWheel } from "@/lib/marketData";
 import { cachedDailyBars } from "@/lib/barsStore";
 import { findLevels, type LvlBar } from "@/lib/levels";
 import { realizedVolSeries, rankWithin } from "@/lib/ivcontext";
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
 
         await mapLimit(WHEEL_UNIVERSE, CONCURRENCY, async (sym) => {
           try {
-            const chain = await fetchWheelChain(sym.ticker, {
+            const chain = await fetchWheel(sym.ticker, {
               dteMin: preset.dteMin, dteMax: preset.dteMax, now,
             });
             if (chain.spot == null || chain.quotes.length === 0) {

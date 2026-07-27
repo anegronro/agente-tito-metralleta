@@ -4,6 +4,11 @@
 // ACTIVIDAD REAL (premium de los trades que están ocurriendo) para dibujar
 // "nodos de concentración" y derivar una predicción (precio imán).
 //
+// DESDE 2026-07-27 el proveedor por defecto es Schwab, que SÍ entrega gamma e IV
+// reales por contrato: cuando llegan, se usan tal cual y esta cascada de
+// estimaciones no se ejecuta. Lo de abajo describe el camino de Massive, que
+// sigue vivo como respaldo (ver lib/optionChain.ts).
+//
 // Massive no entrega gamma ni IV en este plan, así que:
 //  · la IV se estima de la volatilidad realizada del subyacente (barras diarias)
 //  · la gamma se calcula con Black-Scholes por contrato
@@ -131,9 +136,23 @@ export function gexAnalysis(input: GexInput): GexAnalysis {
     if (dte <= 0) continue;
     const T = dte / 365;
 
-    let gamma = bsGamma(spot, r.strike, T, iv);
-    const anchor = realGamma.get(`${r.strike}|${r.contractType}`);
-    if (anchor && anchor.n > 0) gamma = (gamma + anchor.sum / anchor.n) / 2;
+    // Cascada de calidad, de mejor a peor:
+    //  1. Gamma REAL del contrato (Schwab). Es la del proveedor de datos, por
+    //     contrato y con su propia IV: no se toca ni se ancla contra nada. Anclar
+    //     un dato real contra la muestra parcial de MarketSnack lo empeoraría.
+    //  2. Black-Scholes con la IV real del contrato, si la hay pero falta gamma.
+    //  3. Black-Scholes con la IV única de la cadena (estimada de volatilidad
+    //     realizada), anclada donde MarketSnack tenga operaciones. Es lo que
+    //     había antes de Schwab, y sigue siendo el camino con Massive.
+    let gamma: number;
+    if (typeof r.gamma === "number" && r.gamma > 0) {
+      gamma = r.gamma;
+    } else {
+      const ivContrato = typeof r.iv === "number" && r.iv > 0 ? r.iv : iv;
+      gamma = bsGamma(spot, r.strike, T, ivContrato);
+      const anchor = realGamma.get(`${r.strike}|${r.contractType}`);
+      if (anchor && anchor.n > 0) gamma = (gamma + anchor.sum / anchor.n) / 2;
+    }
 
     const gex = gamma * r.openInterest * 100 * spot * spot * 0.01;
     const s = byStrike.get(r.strike) ?? { callGex: 0, putGex: 0 };

@@ -10,7 +10,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { marketDateStr } from "./occ";
-import { fetchDailyBars } from "./massive";
+import { fetchDaily } from "./marketData";
 import type { DailyBar } from "./types";
 
 const DATA_DIR = path.join(process.cwd(), "data", "bars");
@@ -48,7 +48,7 @@ export async function cachedDailyBars(ticker: string, days = 365, now = new Date
   const cached = await loadBars(ticker);
   if (cached && cached.date === today && cached.bars.length > 0) return cached.bars;
 
-  const bars = await fetchDailyBars(ticker, days).catch(() => [] as DailyBar[]);
+  const bars = await fetchDaily(ticker, days).catch(() => [] as DailyBar[]);
   if (bars.length > 0) await saveBars(ticker, bars, now);
   return bars;
 }

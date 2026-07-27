@@ -3,7 +3,11 @@
 import { countExpirations, sortByOpenInterestDesc, toRow } from "@/lib/compute";
 import { structureScore } from "@/lib/structure";
 import { saveChainSnapshot, type ChainSnapshot } from "@/lib/chainStore";
-import { fetchCompany, fetchOptionChain, MassiveError } from "@/lib/massive";
+import { MassiveError } from "@/lib/massive";
+// La cadena viene del proveedor activo (Schwab si hay credenciales); el resto de
+// datos de empresa sigue saliendo de Massive, que sí los sirve con este plan.
+import { fetchChain, fetchCompanyInfo } from "@/lib/marketData";
+import { SchwabError } from "@/lib/schwab";
 import type { ChainEvent, ChainMeta, Row } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -32,13 +36,13 @@ export async function GET(request: Request) {
         }
 
         send({ type: "step", label: `Buscando información de ${ticker}…` });
-        const company = await fetchCompany(ticker);
+        const company = await fetchCompanyInfo(ticker);
         send({ type: "company", company });
 
         send({ type: "step", label: "Conectando con Massive…" });
 
         const { contracts, underlyingPrice, pages, truncated } =
-          await fetchOptionChain(ticker, {
+          await fetchChain(ticker, {
             onPage: (page, accumulated) => {
               send({
                 type: "step",
@@ -89,10 +93,15 @@ export async function GET(request: Request) {
         };
         send({ type: "done", rows, meta, structure, history });
       } catch (err) {
+        // Reconocer AMBOS proveedores: con solo MassiveError, un fallo de Schwab
+        // caía en el genérico y encima culpaba a Massive. El mensaje del
+        // proveedor dice qué hacer; el genérico no dice nada.
         const message =
-          err instanceof MassiveError
+          err instanceof MassiveError || err instanceof SchwabError
             ? err.message
-            : "Error inesperado al consultar Massive.";
+            : err instanceof Error
+              ? `Error inesperado: ${err.message}`
+              : "Error inesperado al consultar los datos de mercado.";
         send({ type: "error", message });
       } finally {
         controller.close();

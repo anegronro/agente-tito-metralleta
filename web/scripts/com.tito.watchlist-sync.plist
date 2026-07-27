@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tito.watchlist-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/sync-watchlist.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/angel/Desktop/agente-tito-metralleta/web</string>
+
+    <!-- Cada 15 min. Con la cola vacia o el servidor apagado el guion sale en
+         silencio (exit 0) sin invocar al modelo: coste cero en los pases en vacio. -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <!-- Deliberadamente false: el primer pase ocurre a los 15 min, no al cargar,
+         para que instalar el job no sea por si mismo una escritura al broker. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/sync-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/sync-launchd.log</string>
+</dict>
+</plist>

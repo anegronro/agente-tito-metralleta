@@ -15,6 +15,22 @@ const DATA_DIR = path.join(process.cwd(), "data", "predictions");
 /** Cuántas fotos guardar por ticker. */
 export const JOURNAL_DAYS = 120;
 
+/**
+ * Marca de régimen del motor. Se estampa en cada foto y CORTA la calibración:
+ * las estadísticas agregadas solo miran fotos de la versión vigente.
+ *
+ * Por qué existe: hasta el 2026-07-27 la gamma del GEX se estimaba con
+ * Black-Scholes usando UNA sola IV para toda la cadena, lo que empujaba el nodo
+ * imán —y por tanto el target base— a quedar pegado al precio de contado por
+ * pura mecánica del modelo. Con la gamma real de Schwab el imán se mueve a donde
+ * está el posicionamiento de verdad (en NVDA, de $197.5 a $220).
+ *
+ * Mezclar los dos regímenes en el mismo promedio de sesgo daría una corrección
+ * que no describe a ninguno de los dos. Al subir esta constante, el historial se
+ * conserva y se sigue enseñando, pero deja de contar para el sesgo.
+ */
+export const ENGINE_VERSION = "gamma-real-2026-07-27";
+
 export interface PredictionSnapshot {
   date: string;        // fecha de mercado (ET), YYYY-MM-DD
   savedAt: string;
@@ -25,6 +41,8 @@ export interface PredictionSnapshot {
   bull: number;
   direction: "up" | "down" | "flat";
   confidence: number;
+  /** Régimen del motor que la produjo. Ausente = anterior al corte (gamma estimada). */
+  engine?: string;
 }
 
 export interface PredictionJournal {
@@ -55,11 +73,20 @@ export interface PredictionEval {
   bearTouched: boolean;
   directionHit: boolean | null;
   best: "bear" | "base" | "bull" | null; // el target más cercano al cierre real
+  /** Régimen que la produjo. Ausente = anterior al corte. */
+  engine?: string;
+  /** true si NO cuenta para las estadísticas por ser de un régimen anterior. */
+  legacy: boolean;
 }
 
 export interface PredictionReview {
-  evals: PredictionEval[];          // más reciente primero
+  evals: PredictionEval[];          // más reciente primero (incluye las legacy)
+  /** Madurados del régimen VIGENTE. Es la base de todas las métricas de abajo. */
   maturedCount: number;
+  /** Madurados descartados por ser de un régimen anterior. Solo informativo. */
+  legacyMaturedCount: number;
+  /** Régimen sobre el que se calcularon las métricas. */
+  engine: string;
   meanAbsErrorPct: number | null;   // error medio del target base (madurados)
   biasPct: number | null;           // error medio FIRMADO (>0 = subestima, precio quedó arriba)
   baseTouchRate: number | null;     // % de veces que el precio tocó el target base
@@ -96,7 +123,14 @@ export async function savePrediction(
 ): Promise<PredictionJournal> {
   const clean = ticker.trim().toUpperCase();
   const date = marketDateStr(now);
-  const snapshot: PredictionSnapshot = { ...snap, date, savedAt: now.toISOString() };
+  // El régimen se estampa aquí y no lo pasa el llamador: es una propiedad del
+  // motor, no de la petición, y así ninguna ruta puede olvidarse de ponerlo.
+  const snapshot: PredictionSnapshot = {
+    ...snap,
+    date,
+    savedAt: now.toISOString(),
+    engine: ENGINE_VERSION,
+  };
 
   const existing = await loadJournal(clean);
   const byDate = new Map<string, PredictionSnapshot>();
@@ -143,6 +177,7 @@ export function reviewPredictions(
         baseErrorPct: null, baseAbsErrorPct: null,
         baseTouched: false, bullTouched: false, bearTouched: false,
         directionHit: null, best: null,
+        engine: s.engine, legacy: s.engine !== ENGINE_VERSION,
       });
       continue;
     }
@@ -174,12 +209,19 @@ export function reviewPredictions(
       bullTouched: touched(s.bull, s.spot, actualHigh, actualLow),
       bearTouched: touched(s.bear, s.spot, actualHigh, actualLow),
       directionHit, best,
+      engine: s.engine, legacy: s.engine !== ENGINE_VERSION,
     });
   }
 
   evals.sort((a, b) => b.date.localeCompare(a.date));
 
-  const mat = evals.filter((e) => e.matured && e.actualClose != null);
+  // El corte: las fotos de un régimen anterior SE SIGUEN ENSEÑANDO en `evals`
+  // (el historial es del usuario), pero no entran en ninguna métrica. El sesgo
+  // alimenta la auto-corrección de predictPro, y promediar dos regímenes daría
+  // una corrección que no describe a ninguno.
+  const maduros = evals.filter((e) => e.matured && e.actualClose != null);
+  const mat = maduros.filter((e) => !e.legacy);
+  const legacyMaturedCount = maduros.length - mat.length;
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const bestCounts = { bear: 0, base: 0, bull: 0 };
   for (const e of mat) if (e.best) bestCounts[e.best] += 1;
@@ -187,6 +229,8 @@ export function reviewPredictions(
   return {
     evals,
     maturedCount: mat.length,
+    legacyMaturedCount,
+    engine: ENGINE_VERSION,
     meanAbsErrorPct: mean(mat.map((e) => e.baseAbsErrorPct!).filter((x) => x != null)),
     biasPct: mean(mat.map((e) => e.baseErrorPct!).filter((x) => x != null)),
     baseTouchRate: mat.length ? (mat.filter((e) => e.baseTouched).length / mat.length) * 100 : null,

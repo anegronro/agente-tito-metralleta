@@ -3,7 +3,7 @@
 //   GET  /api/prediction?ticker=XXX              → revisa las predicciones guardadas contra
 //                                                   el precio real posterior (auto-evaluación)
 
-import { fetchDailyBars } from "@/lib/massive";
+import { fetchDaily } from "@/lib/marketData";
 import {
   loadJournal, savePrediction, reviewPredictions,
   type PredictionSnapshot,
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   try {
     const [journal, bars] = await Promise.all([
       loadJournal(ticker),
-      fetchDailyBars(ticker, 200).catch(() => []),
+      fetchDaily(ticker, 200).catch(() => []),
     ]);
     const snapshots = journal?.snapshots ?? [];
     const review = reviewPredictions(

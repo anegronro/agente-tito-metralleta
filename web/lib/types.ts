@@ -25,6 +25,20 @@ export interface RawContract {
     price?: number;
     ticker?: string;
   };
+  // --- Extras que SOLO trae Schwab (Massive no los da en ningún plan) ---
+  // Opcionales a propósito: con Massive llegan `undefined` y todo sigue igual.
+  // Quien los consuma debe tratarlos como un regalo, no como un requisito.
+  greeks?: {
+    delta?: number;
+    gamma?: number;
+    theta?: number;
+    vega?: number;
+    rho?: number;
+  };
+  /** IV en DECIMAL (0.503 = 50.3%), ya normalizada desde el % que manda Schwab. */
+  implied_volatility?: number;
+  bid?: number;
+  ask?: number;
 }
 
 /** De dónde salió el precio usado para Open Premium (bid no está disponible en este plan). */
@@ -42,6 +56,14 @@ export interface Row {
   priceSource: PriceSource;
   openPremium: number | null;
   notionalValue: number;
+  /**
+   * Gamma REAL del contrato, cuando el proveedor la da (Schwab sí, Massive no).
+   * `gex.ts` la prefiere sobre la estimación de Black-Scholes. Undefined con
+   * Massive, y entonces todo sigue como antes.
+   */
+  gamma?: number;
+  /** IV real del contrato en DECIMAL, cuando el proveedor la da. */
+  iv?: number;
 }
 
 export interface ChainMeta {

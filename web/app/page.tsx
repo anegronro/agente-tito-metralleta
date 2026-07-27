@@ -291,9 +291,22 @@ export default function Dashboard() {
         setChainRows(d.rows); setChainMeta(d.meta); setStructure(d.structure ?? null);
         setChainHistory(d.history ?? []);
         chainDoneRef.current = true; finish(); c.close();
+        // Sin barras NO hay lectura: `gex` las exige, y sin gex no hay predicción.
+        // Por eso un fallo aquí tiene que SALIR EN PANTALLA. Antes caía en
+        // `setBars([])` y la tarjeta se quedaba en "Armando la lectura" para
+        // siempre, sin un solo mensaje — el fallo más caro de depurar del proyecto.
         fetch(`/api/history?ticker=${encodeURIComponent(d.meta.ticker)}`)
-          .then((r) => r.json()).then((h) => setBars(Array.isArray(h.bars) ? h.bars : []))
-          .catch(() => setBars([]));
+          .then(async (r) => {
+            const h = await r.json().catch(() => null);
+            if (!r.ok || !h || !Array.isArray(h.bars) || h.bars.length === 0) {
+              throw new Error(h?.error ?? "El histórico del subyacente llegó vacío.");
+            }
+            setBars(h.bars);
+          })
+          .catch((e: Error) => {
+            setBars([]);
+            setChainErr(`Histórico: ${e.message}`);
+          });
       } else if (d.type === "error") { setChainErr(d.message); chainDoneRef.current = true; finish(); c.close(); }
     };
     c.onerror = () => { chainDoneRef.current = true; finish(); c.close(); };

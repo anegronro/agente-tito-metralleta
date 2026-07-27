@@ -56,6 +56,9 @@ export function toRow(raw: RawContract): Row {
     priceSource: source,
     openPremium: openPremium(openInterest, price),
     notionalValue: notionalValue(openInterest, strike, shares),
+    // Solo llegan con Schwab; con Massive quedan undefined y gex.ts estima.
+    gamma: raw.greeks?.gamma,
+    iv: raw.implied_volatility,
   };
 }
 

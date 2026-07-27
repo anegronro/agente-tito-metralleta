@@ -3,7 +3,7 @@
 // diarias del subyacente.
 
 import { loadTrades } from "@/lib/store";
-import { fetchDailyBars } from "@/lib/massive";
+import { fetchDaily } from "@/lib/marketData";
 import { validationScore, type FlowLite } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const [stored, bars] = await Promise.all([
       loadTrades(ticker),
-      fetchDailyBars(ticker, 200).catch(() => []),
+      fetchDaily(ticker, 200).catch(() => []),
     ]);
 
     const flows: FlowLite[] = (stored?.trades ?? [])

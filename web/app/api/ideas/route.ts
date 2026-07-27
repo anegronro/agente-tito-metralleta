@@ -11,7 +11,7 @@ import { classifyFlow, type FlowRow } from "@/lib/flow";
 import { fetchMarketFlow, MarketSnackError } from "@/lib/marketsnack";
 import { isTradeableIdea, passesQualityFilter } from "@/lib/risk";
 import { loadTrades, saveTrades } from "@/lib/store";
-import { fetchDailyBars } from "@/lib/massive";
+import { fetchDaily } from "@/lib/marketData";
 import { validationScore, type FlowLite } from "@/lib/validation";
 import type { Idea, IdeaHistory } from "@/app/ideas/types";
 
@@ -116,7 +116,7 @@ export async function GET() {
           });
         }
         for (const { ticker, flows } of toReview) {
-          const bars = await fetchDailyBars(ticker, 200).catch(() => []);
+          const bars = await fetchDaily(ticker, 200).catch(() => []);
           if (bars.length === 0) continue;
           const report = validationScore({ flows, bars, now });
           history.set(ticker, {

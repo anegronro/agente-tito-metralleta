@@ -129,3 +129,77 @@ describe("gexAnalysis", () => {
     expect(a.confidence).toBeLessThanOrEqual(100);
   });
 });
+
+// ── Gamma real del proveedor (Schwab) vs estimación Black-Scholes ────────────
+
+/** Como `row`, pero con la gamma/IV reales que solo entrega Schwab. */
+function rowConGriegos(
+  strike: number,
+  type: "call" | "put",
+  oi: number,
+  gamma: number,
+  iv?: number,
+): Row {
+  return { ...row(strike, type, oi), gamma, iv };
+}
+
+describe("gexAnalysis — cascada de gamma", () => {
+  const base = (rows: Row[], trades: GexInput["trades"] = []): GexInput => ({
+    rows,
+    closes: Array.from({ length: 40 }, (_, i) => 100 + Math.sin(i) * 2),
+    spot: 100,
+    trades,
+    now: NOW,
+  });
+
+  it("usa la gamma real del contrato cuando existe", () => {
+    // Dos cadenas idénticas salvo la gamma real: 10x más gamma ⇒ 10x más GEX.
+    const chica = gexAnalysis(base([rowConGriegos(100, "call", 1000, 0.01)]));
+    const grande = gexAnalysis(base([rowConGriegos(100, "call", 1000, 0.1)]));
+    expect(grande.totalNetGex / chica.totalNetGex).toBeCloseTo(10, 4);
+  });
+
+  it("NO ancla la gamma real contra la de MarketSnack", () => {
+    // El anclaje existe para corregir una ESTIMACIÓN. Aplicarlo a un dato real
+    // lo degradaría, así que con gamma del proveedor debe ignorarse el trade.
+    const rows = [rowConGriegos(100, "call", 1000, 0.05)];
+    const sinTrade = gexAnalysis(base(rows));
+    const conTrade = gexAnalysis(
+      base(rows, [{ strike: 100, type: "call", gamma: 0.9, premium: 1_000_000 }]),
+    );
+    expect(conTrade.totalNetGex).toBeCloseTo(sinTrade.totalNetGex, 6);
+  });
+
+  it("cae a Black-Scholes cuando el proveedor no da gamma", () => {
+    // Camino de Massive: sin gamma real el resultado debe seguir siendo > 0.
+    const a = gexAnalysis(base([row(100, "call", 1000)]));
+    expect(a.totalNetGex).toBeGreaterThan(0);
+    expect(a.nodes.length).toBeGreaterThan(0);
+  });
+
+  it("una gamma real de 0 o negativa no se toma por buena", () => {
+    // Un 0 del proveedor no debe anular el strike en silencio: se estima.
+    const conCero = gexAnalysis(base([rowConGriegos(100, "call", 1000, 0)]));
+    const sinNada = gexAnalysis(base([row(100, "call", 1000)]));
+    expect(conCero.totalNetGex).toBeCloseTo(sinNada.totalNetGex, 6);
+  });
+
+  it("usa la IV real del contrato en el respaldo de Black-Scholes", () => {
+    // Sin gamma pero con IV: dos IV distintas deben dar gamma distinta.
+    const ivBaja = gexAnalysis(base([{ ...row(100, "call", 1000), iv: 0.2 }]));
+    const ivAlta = gexAnalysis(base([{ ...row(100, "call", 1000), iv: 0.9 }]));
+    expect(ivBaja.totalNetGex).not.toBeCloseTo(ivAlta.totalNetGex, 6);
+    // Más IV ⇒ menos gamma en el dinero (la campana se aplana).
+    expect(ivAlta.totalNetGex).toBeLessThan(ivBaja.totalNetGex);
+  });
+
+  it("los puts con gamma real siguen restando al GEX neto", () => {
+    const a = gexAnalysis(
+      base([
+        rowConGriegos(100, "call", 1000, 0.05),
+        rowConGriegos(100, "put", 1000, 0.05),
+      ]),
+    );
+    expect(a.totalNetGex).toBeCloseTo(0, 6);
+  });
+});

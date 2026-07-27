@@ -79,6 +79,17 @@ export default function MemoriaCard({ ticker }: { ticker: string }) {
         </div>
       )}
 
+      {/* Sin este aviso, el reseteo de la calibración parece un historial perdido. */}
+      {r && r.legacyMaturedCount > 0 && (
+        <div className="mem-empty">
+          <b>{r.legacyMaturedCount}</b> predicción{r.legacyMaturedCount === 1 ? "" : "es"}
+          {" "}vencida{r.legacyMaturedCount === 1 ? "" : "s"} no cuenta
+          {r.legacyMaturedCount === 1 ? "" : "n"} en estos números: se hicieron con el
+          motor anterior, que estimaba la gamma en vez de leerla del proveedor.
+          Se siguen viendo abajo, pero mezclarlas falsearía el sesgo.
+        </div>
+      )}
+
       {r && r.maturedCount > 0 && (
         <>
           <div className="mem-stats">

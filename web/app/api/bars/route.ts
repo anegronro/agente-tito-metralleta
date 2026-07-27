@@ -1,6 +1,8 @@
 // GET /api/bars?ticker=XXX&tf=1y|15m10d|5m5d — barras del subyacente para la gráfica de flujo.
 
-import { fetchBars, MassiveError } from "@/lib/massive";
+import { MassiveError } from "@/lib/massive";
+import { fetchTfBars } from "@/lib/marketData";
+import { SchwabError } from "@/lib/schwab";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,10 +20,13 @@ export async function GET(request: Request) {
   const cfg = TF[tf] ?? TF["5m5d"];
   if (!ticker) return Response.json({ error: "ticker requerido" }, { status: 400 });
   try {
-    const bars = await fetchBars(ticker, cfg.m, cfg.span, cfg.days);
+    const bars = await fetchTfBars(ticker, cfg.m, cfg.span, cfg.days);
     return Response.json({ ticker, tf, bars });
   } catch (err) {
-    const message = err instanceof MassiveError ? err.message : "Error al cargar barras.";
+    const message =
+      err instanceof MassiveError || err instanceof SchwabError
+        ? err.message
+        : "Error al cargar barras.";
     return Response.json({ error: message }, { status: 502 });
   }
 }

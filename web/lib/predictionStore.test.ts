@@ -1,11 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { reviewPredictions, type PredictionSnapshot, type EvalBar } from "./predictionStore";
+import {
+  ENGINE_VERSION,
+  reviewPredictions,
+  type PredictionSnapshot,
+  type EvalBar,
+} from "./predictionStore";
 
+/**
+ * Foto del régimen VIGENTE. Lleva `engine` a propósito: sin él contaría como
+ * legacy y quedaría fuera de las métricas, que es justo lo que comprueban los
+ * tests del corte más abajo.
+ */
 function snap(over: Partial<PredictionSnapshot> = {}): PredictionSnapshot {
   return {
     date: "2026-01-05", savedAt: "2026-01-05T21:00:00Z",
     spot: 100, horizonDays: 20, bear: 92, base: 105, bull: 112,
-    direction: "up", confidence: 60, ...over,
+    direction: "up", confidence: 60, engine: ENGINE_VERSION, ...over,
   };
 }
 
@@ -63,5 +73,51 @@ describe("reviewPredictions", () => {
     expect(r.meanAbsErrorPct).toBeCloseTo(2.5, 5);
     expect(r.biasPct).toBeCloseTo(0.5, 5);
     expect(r.directionHitRate).toBe(100); // ambos 'up' y ambos cerraron > spot 100
+  });
+});
+
+// ── El corte de régimen (gamma estimada → gamma real de Schwab) ──────────────
+
+describe("reviewPredictions — corte por régimen del motor", () => {
+  const bars = [bar("2026-01-06", 101), bar("2026-01-23", 106)];
+  const AHORA = new Date("2026-02-01T12:00:00Z");
+
+  it("no cuenta las fotos sin engine (anteriores al corte)", () => {
+    const vieja = { ...snap(), engine: undefined };
+    const r = reviewPredictions([vieja], bars, AHORA);
+    expect(r.maturedCount).toBe(0);
+    expect(r.legacyMaturedCount).toBe(1);
+    expect(r.biasPct).toBeNull();
+    expect(r.meanAbsErrorPct).toBeNull();
+  });
+
+  it("las sigue enseñando en el historial, marcadas", () => {
+    // El historial es del usuario: se excluyen de las métricas, no de la vista.
+    const r = reviewPredictions([{ ...snap(), engine: undefined }], bars, AHORA);
+    expect(r.evals).toHaveLength(1);
+    expect(r.evals[0].legacy).toBe(true);
+    expect(r.evals[0].actualClose).toBe(106); // se evaluó igual
+  });
+
+  it("tampoco cuenta las de un régimen distinto al vigente", () => {
+    const r = reviewPredictions([{ ...snap(), engine: "otro-motor-v1" }], bars, AHORA);
+    expect(r.maturedCount).toBe(0);
+    expect(r.legacyMaturedCount).toBe(1);
+  });
+
+  it("el sesgo se calcula SOLO sobre el régimen vigente", () => {
+    // La vieja tiene un error enorme; si contara, arrastraría el sesgo.
+    const vigente = snap({ base: 105 });                       // error (106-105)/100 = +1
+    const vieja = { ...snap({ base: 40 }), engine: undefined }; // error sería +66
+    const r = reviewPredictions([vigente, vieja], bars, AHORA);
+    expect(r.maturedCount).toBe(1);
+    expect(r.legacyMaturedCount).toBe(1);
+    expect(r.biasPct).toBeCloseTo(1, 5); // ni rastro del +66
+  });
+
+  it("informa del régimen sobre el que calculó", () => {
+    const r = reviewPredictions([snap()], bars, AHORA);
+    expect(r.engine).toBe(ENGINE_VERSION);
+    expect(r.evals[0].legacy).toBe(false);
   });
 });
