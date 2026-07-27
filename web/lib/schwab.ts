@@ -165,7 +165,7 @@ async function accessToken(): Promise<string> {
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: stored.refresh_token,
+      refresh_token: refresh,
     }),
     cache: "no-store",
   });
@@ -189,7 +189,7 @@ async function accessToken(): Promise<string> {
 
   // Schwab puede ROTAR el refresh al renovar. Si llega uno nuevo y no se guarda,
   // la sesión muere en cuanto caduque el viejo.
-  if (tok.refresh_token && tok.refresh_token !== stored.refresh_token) {
+  if (tok.refresh_token && tok.refresh_token !== refresh) {
     try {
       writeFileSync(
         TOKEN_FILE,
