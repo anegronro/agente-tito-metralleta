@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tito.schwab-push</string>
+
+    <!-- Intérprete de uv: es el que tiene Acceso a Disco Completo. Con
+         /usr/bin/python3 launchd no puede leer el script desde ~/Desktop
+         ("Operation not permitted", exit 126). Ya nos pasó dos veces. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/angel/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12</string>
+        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/schwab-push.py</string>
+    </array>
+
+    <!-- Cada 15 min. El access token de Schwab dura 30, así que hay un pase
+         entero de margen si uno falla (red caída, VPS reiniciando). -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/schwab-push.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/schwab-push.err.log</string>
+</dict>
+</plist>
