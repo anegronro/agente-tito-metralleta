@@ -67,7 +67,7 @@ html, body {
   top: 0;
   z-index: 40;
 }
-.hb-brand { display: flex; align-items: center; gap: 10px; }
+.hb-brand { display: flex; align-items: center; gap: 10px; flex: none; }
 /* Contenedor de la marca. Sin fondo ni degradado: el SVG de Logo.tsx ya trae
    su propio color y una caja de color detrás le robaría contraste al dorado. */
 .hb-logo {
@@ -104,11 +104,20 @@ html, body {
 .hb-search {
   font-family: inherit; font-size: 13px; padding: 8px 14px;
   border-radius: 999px; border: 1px solid var(--border);
-  background: #f8f9fb; color: var(--text); outline: none; width: 190px;
+  background: #f8f9fb; color: var(--text); outline: none;
+  /* Es el elemento elástico de la cabecera: cede ancho cuando falta sitio
+     (hasta 120px) en vez de empujar al precio fuera de la pantalla. */
+  width: 190px; min-width: 120px; flex: 0 1 190px;
 }
 .hb-search:focus { border-color: var(--accent); background: #ffffff; }
-.hb-right { margin-left: auto; display: flex; align-items: baseline; gap: 10px; }
-.hb-ticker-name { font-size: 13px; color: var(--muted); }
+/* El bloque de precio NO se encoge: con el nombre de marca más largo, el flex
+   le robaba sitio y el porcentaje quedaba cortado por el borde. Quien cede
+   espacio es el buscador, que sí puede estrecharse sin perder función. */
+.hb-right {
+  margin-left: auto; display: flex; align-items: baseline; gap: 10px;
+  flex: none;
+}
+.hb-ticker-name { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .hb-price { font-size: 20px; font-weight: 700; }
 .hb-chg { font-size: 13px; font-weight: 600; }
 .hb-link { font-size: 12px; color: var(--accent); text-decoration: none; white-space: nowrap; }
