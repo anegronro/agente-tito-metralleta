@@ -1,17 +1,20 @@
 /**
- * Marca de Interstellar Options: órbita + flecha ascendente + nodos.
+ * Marca de Interstellar Options: flecha ascendente con veta verde, cruzando
+ * una órbita partida.
  *
- * Dos ajustes respecto al boceto original de la guía de marca:
+ * Colores tomados del logo real (azul marino + verde), no de la guía dorada:
+ * el verde ya es el color de "call / subida" en esta app, así que la marca
+ * queda coherente con el resto de la interfaz en vez de pelearse con ella.
  *
- * 1. El trazo grueso bajo la flecha era BLANCO, pensado para fondo oscuro.
- *    Sobre el tema claro de esta app sería invisible y la flecha perdería su
- *    contorno, así que usa el azul marino de la paleta (#1E2640) — cumple la
- *    misma función de halo, pero al revés.
- * 2. El boceto comentaba con `#` dentro del SVG. Eso no es un comentario en
- *    HTML/SVG: se renderizaría como texto suelto encima del dibujo.
- *
- * `currentColor` no se usa a propósito: la marca es de color fijo.
+ * OJO CON EL TAMAÑO: en la cabecera esto se dibuja a 30px. Los puntitos de
+ * estrellas del logo original son de radio ~4 sobre un lienzo de 200 — a ese
+ * tamaño miden medio píxel y desaparecen. Aquí se conservan solo los tres más
+ * grandes y el resto se deja fuera: un detalle invisible no es un detalle, es
+ * suciedad. La versión grande sigue leyéndose bien sin ellos.
  */
+const NAVY = "#17284A";
+const VERDE = "#3ED662";
+
 export default function Logo({ size = 30 }: { size?: number }) {
   return (
     <svg
@@ -23,40 +26,45 @@ export default function Logo({ size = 30 }: { size?: number }) {
       role="img"
       aria-label="Interstellar Options"
     >
-      {/* Arco orbital exterior */}
+      {/* Órbita partida: dos tramos opuestos, no un anillo cerrado. */}
       <path
-        d="M 40 100 A 60 60 0 1 1 150 140"
-        stroke="#1E2640"
-        strokeWidth="8"
+        d="M 62 44 A 72 72 0 0 0 44 128"
+        stroke={NAVY}
+        strokeWidth="13"
         strokeLinecap="round"
+        fill="none"
       />
       <path
-        d="M 160 100 A 60 60 0 0 1 50 150"
-        stroke="#D4AF37"
-        strokeWidth="8"
+        d="M 156 78 A 72 72 0 0 1 92 166"
+        stroke={NAVY}
+        strokeWidth="13"
         strokeLinecap="round"
+        fill="none"
       />
 
-      {/* Flecha diagonal: trazo grueso de contorno + dorado encima */}
+      {/* Cuerpo de la flecha: barra gruesa en marino de esquina a esquina. */}
       <line
-        x1="45" y1="155" x2="145" y2="55"
-        stroke="#1E2640"
-        strokeWidth="12"
-        strokeLinecap="round"
+        x1="42" y1="158" x2="140" y2="60"
+        stroke={NAVY}
+        strokeWidth="30"
+        strokeLinecap="butt"
       />
+
+      {/* Veta verde por dentro — la firma del logo. */}
       <line
-        x1="45" y1="155" x2="145" y2="55"
-        stroke="#D4AF37"
-        strokeWidth="6"
-        strokeLinecap="round"
+        x1="42" y1="158" x2="134" y2="66"
+        stroke={VERDE}
+        strokeWidth="9"
+        strokeLinecap="butt"
       />
 
-      {/* Punta de flecha */}
-      <path d="M 125 45 L 160 40 L 155 75 Z" fill="#D4AF37" />
+      {/* Punta sólida. */}
+      <path d="M 108 44 L 166 34 L 156 92 Z" fill={NAVY} />
 
-      {/* Nodos / planetas */}
-      <circle cx="120" cy="150" r="7" fill="#8E95A5" />
-      <circle cx="65" cy="65" r="5" fill="#8E95A5" />
+      {/* Solo las estrellas que sobreviven a 30px. */}
+      <circle cx="76" cy="62" r="7" fill={NAVY} />
+      <circle cx="132" cy="132" r="8" fill={NAVY} />
+      <circle cx="104" cy="152" r="5" fill={NAVY} />
     </svg>
   );
 }
