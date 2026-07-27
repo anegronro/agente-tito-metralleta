@@ -8,7 +8,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Tito Metralleta — Options AI",
+  title: "Interstellar Options — Options AI",
   description: "AI Options Agent — scorecard, flujo y predicción.",
 };
 

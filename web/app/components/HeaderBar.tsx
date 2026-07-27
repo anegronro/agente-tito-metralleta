@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CompanyInfo } from "@/lib/types";
 import { pct, px } from "../format";
 import NavTabs from "./NavTabs";
+import Logo from "@/app/components/Logo";
 
 const QUICK = ["TSLA", "NVDA", "SPY", "AAPL"];
 
@@ -30,8 +31,8 @@ export default function HeaderBar({
   return (
     <div className="hb">
       <div className="hb-brand">
-        <div className="hb-logo">T</div>
-        <div className="hb-name">Tito Metralleta</div>
+        <div className="hb-logo"><Logo size={30} /></div>
+        <div className="hb-name">Interstellar Options</div>
         <div className="hb-chip">AI Options Agent</div>
       </div>
       <NavTabs />

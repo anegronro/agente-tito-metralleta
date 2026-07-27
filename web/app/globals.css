@@ -68,11 +68,12 @@ html, body {
   z-index: 40;
 }
 .hb-brand { display: flex; align-items: center; gap: 10px; }
+/* Contenedor de la marca. Sin fondo ni degradado: el SVG de Logo.tsx ya trae
+   su propio color y una caja de color detrás le robaría contraste al dorado. */
 .hb-logo {
-  width: 30px; height: 30px; border-radius: 8px;
-  background: linear-gradient(135deg, #2f6bff, #12b76a);
+  width: 30px; height: 30px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 14px;
+  flex: none;
 }
 .hb-name { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
 .hb-chip {

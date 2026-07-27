@@ -25,6 +25,7 @@ import {
   saveEntries,
 } from "@/lib/watchlistLocal";
 import type { Idea, IdeasEvent, IdeasMeta } from "./types";
+import Logo from "@/app/components/Logo";
 
 const KEY_VIEW = "tito.view";
 const KEY_HORIZON = "tito.ideas.horizon";
@@ -309,8 +310,8 @@ export default function IdeasPage() {
     <main className="ideas-page">
       <div className="hb">
         <div className="hb-brand">
-          <div className="hb-logo">T</div>
-          <div className="hb-name">Tito Metralleta</div>
+          <div className="hb-logo"><Logo size={30} /></div>
+          <div className="hb-name">Interstellar Options</div>
           <div className="hb-chip">Ideas del mercado</div>
         </div>
         <NavTabs />

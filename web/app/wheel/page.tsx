@@ -9,6 +9,7 @@ import { sortByAffordThenScore } from "@/lib/wheelAfford";
 import type { PresetId, WheelCandidate } from "@/lib/wheel";
 import type { RiskProfile } from "@/lib/risk";
 import type { WheelSseEvent } from "./types";
+import Logo from "@/app/components/Logo";
 
 const KEY_VIEW = "tito.view";
 const KEY_PRESET = "tito.wheel.preset";
@@ -65,8 +66,8 @@ export default function WheelPage() {
     <main className="ideas-page">
       <div className="hb">
         <div className="hb-brand">
-          <div className="hb-logo">T</div>
-          <div className="hb-name">Tito Metralleta</div>
+          <div className="hb-logo"><Logo size={30} /></div>
+          <div className="hb-name">Interstellar Options</div>
           <div className="hb-chip">Wheel · ingreso con puts</div>
         </div>
         <NavTabs />
