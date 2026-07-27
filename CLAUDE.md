@@ -89,9 +89,22 @@ estabilizan, commitea; y empuja si hay remoto escribible.
 
 - **Autónomo a propósito:** no importa nada del motor de forex. Son proyectos
   distintos y no deben acoplarse.
-- **Sin remoto escribible sigue versionando en LOCAL.** Es el caso actual: el
-  repo es de `infusionvictor` y `anegronro` solo tiene lectura, así que el push
-  falla y los commits se acumulan en la rama local hasta que exista un fork.
+- **Sin remoto escribible sigue versionando en LOCAL.** Fue el caso hasta que
+  Angel forkeó: `anegronro` solo tiene lectura sobre el repo de Víctor.
+
+### Remotos (flujo de fork)
+
+| Remoto | Apunta a | Para qué |
+|---|---|---|
+| `origin` | `anegronro/agente-tito-metralleta` | Donde empuja el watcher |
+| `upstream` | `infusionvictor/agente-tito-metralleta` | De donde se traen los cambios de Víctor |
+
+La URL de **push** de `upstream` está deshabilitada a propósito
+(`git remote set-url --push upstream DISABLED_usa_un_PR`): así un `git push`
+distraído no puede escribir en el repo de Víctor. Para proponerle cambios, se
+abre un **pull request** desde el fork.
+
+Traer lo nuevo de Víctor: `git fetch upstream && git merge upstream/main`.
 - **El commit va primero y el push es best-effort.** En el watcher de forex un
   `pull` en bucle dejó commits locales para siempre con el proceso figurando
   sano; aquí un pull fallido no puede bloquear nada.
