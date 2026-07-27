@@ -76,7 +76,9 @@ export class SchwabError extends Error {
 }
 
 interface StoredTokens {
-  refresh_token: string;
+  /** Opcional: en el VPS (modo seguidor) el archivo llega SIN refresh token,
+   *  a propósito — esa máquina no debe poder renovar nada por su cuenta. */
+  refresh_token?: string;
   access_token?: string | null;
   obtained_at?: string;
   expires_in?: number | null;
@@ -86,7 +88,8 @@ interface StoredTokens {
 // merece escribirse en cada renovación (dura ~30 min y el proceso lo reusa).
 let cachedAccess: { token: string; expiresAt: number } | null = null;
 
-function readTokens(): StoredTokens {
+/** `requireRefresh: false` para el modo seguidor, que solo necesita el access. */
+function readTokens({ requireRefresh = true } = {}): StoredTokens {
   let raw: string;
   try {
     raw = readFileSync(TOKEN_FILE, "utf8");
@@ -96,7 +99,7 @@ function readTokens(): StoredTokens {
     );
   }
   const t = JSON.parse(raw) as StoredTokens;
-  if (!t.refresh_token) {
+  if (requireRefresh && !t.refresh_token) {
     throw new SchwabError(
       "El archivo de tokens de Schwab no tiene refresh_token. Corre: node scripts/schwab-auth.mjs",
     );
@@ -127,8 +130,32 @@ async function accessToken(): Promise<string> {
     return cachedAccess.token;
   }
 
+  // ── Modo SEGUIDOR (el VPS) ────────────────────────────────────────────────
+  // El refresh token de Schwab ROTA al usarse: si el Mac y el VPS renovaran
+  // cada uno por su cuenta, el segundo invalidaría el token del primero y la
+  // sesión moriría en un sitio u otro sin explicación.
+  //
+  // Por eso hay un solo DUEÑO (el Mac), que renueva y empuja el access token
+  // por Tailscale. Aquí solo se lee. Nunca se renueva, y el refresh token ni
+  // siquiera hace falta que exista en esta máquina.
+  if (process.env.SCHWAB_ROLE === "follower") {
+    const t = readTokens({ requireRefresh: false });
+    const nacido = t.obtained_at ? Date.parse(t.obtained_at) : 0;
+    const caduca = nacido + (t.expires_in ?? 1800) * 1000;
+    if (!t.access_token || Date.now() >= caduca - EXPIRY_MARGIN_MS) {
+      throw new SchwabError(
+        "El access token de Schwab llegó caducado. Lo empuja el Mac: revisa que " +
+          "com.tito.schwab-push esté vivo (launchctl list | grep schwab-push).",
+      );
+    }
+    cachedAccess = { token: t.access_token, expiresAt: caduca };
+    return cachedAccess.token;
+  }
+
   const { key, secret } = credentials();
   const stored = readTokens();
+  // readTokens() ya lo exige en modo dueño; esto solo estrecha el tipo.
+  const refresh = stored.refresh_token as string;
 
   const res = await fetch(`${BASE_URL}/v1/oauth/token`, {
     method: "POST",
