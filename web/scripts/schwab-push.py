@@ -14,6 +14,11 @@ ni mantener el acceso más allá de esa media hora.
 Corre bajo launchd cada 15 min (com.tito.schwab-push). El access dura 30, así
 que hay un pase de margen si uno falla.
 """
+# El python del sistema en esta Mac es 3.9 y no acepta `str | None` en las
+# anotaciones. Bajo launchd corre con el 3.12 de uv, pero conviene que también
+# se pueda lanzar a mano.
+from __future__ import annotations
+
 import base64
 import json
 import os
@@ -29,7 +34,9 @@ ENV_FILE = os.path.join(WEB, ".env.local")
 TOKEN_FILE = os.path.join(WEB, "data", "schwab-tokens.json")
 
 VPS = os.environ.get("TITO_VPS", "root@100.105.244.125")
-DESTINO = "/root/tito/web/data/schwab-tokens.json"
+# El bundle standalone deja server.js en /root/tito, y systemd fija ahí el
+# WorkingDirectory, así que `process.cwd()/data` resuelve a /root/tito/data.
+DESTINO = "/root/tito/data/schwab-tokens.json"
 TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
 
 
