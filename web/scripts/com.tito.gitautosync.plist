@@ -5,13 +5,20 @@
     <key>Label</key>
     <string>com.tito.gitautosync</string>
 
-    <!-- Se invoca python3 DIRECTAMENTE, no /bin/bash: launchd no puede leer
-         scripts de shell desde ~/Desktop por el TCC de macOS ("Operation not
-         permitted"). Es la misma razón por la que el watcher de forex usa el
-         python del venv en vez de un wrapper de shell. -->
+    <!-- Se invoca python DIRECTAMENTE, no /bin/bash: launchd no puede leer
+         scripts desde ~/Desktop por el TCC de macOS ("Operation not permitted").
+         Con /usr/bin/python3 el watcher moría con exit 2 en bucle.
+
+         Este binario de uv es el que TIENE concedido Acceso a Disco Completo, y
+         por eso sí puede leer el Desktop. Se apunta a la ruta REAL y no al
+         symlink `warren-buffett-jr/engine/.venv/bin/python` que lo alcanza:
+         así Tito no depende de que exista el venv del agente de acciones.
+
+         Si algún día falla con "Operation not permitted", la solución limpia es
+         conceder Acceso a Disco Completo a /usr/bin/python3 y volver a él. -->
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
+        <string>/Users/angel/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12</string>
         <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/git-autosync.py</string>
     </array>
 
