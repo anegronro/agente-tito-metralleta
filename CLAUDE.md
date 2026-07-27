@@ -81,6 +81,37 @@ Agente Tito Metralleta/
 - **Limitación del plan actual:** Massive **sí** devuelve `last_quote` (bid/ask) en el Option Chain Snapshot (verificado jul 2026), pero **no** `greeks` ni `implied_volatility`. Open Premium sigue usando `last_trade.price ?? day.close ?? day.vwap` como proxy; el delta de la Wheel se calcula por Black-Scholes (`lib/blackScholes.ts`).
 - Detalle completo en [web/SPEC.md](web/SPEC.md).
 
+## Auto-sync del repo a GitHub (jul 2026)
+
+`web/scripts/git-autosync.py` + LaunchAgent (`com.tito.gitautosync`, KeepAlive).
+Vigila el repo con poll de 20 s y debounce de 25 s: cuando los cambios se
+estabilizan, commitea; y empuja si hay remoto escribible.
+
+- **Autónomo a propósito:** no importa nada del motor de forex. Son proyectos
+  distintos y no deben acoplarse.
+- **Sin remoto escribible sigue versionando en LOCAL.** Es el caso actual: el
+  repo es de `infusionvictor` y `anegronro` solo tiene lectura, así que el push
+  falla y los commits se acumulan en la rama local hasta que exista un fork.
+- **El commit va primero y el push es best-effort.** En el watcher de forex un
+  `pull` en bucle dejó commits locales para siempre con el proceso figurando
+  sano; aquí un pull fallido no puede bloquear nada.
+- **El push se reintenta cada 5 min** aunque nadie toque un archivo.
+- **Blindaje de secretos por nombre**, aunque `.gitignore` no los cubra: si un
+  archivo nuevo huele a credencial, **aborta el commit entero** en vez de
+  filtrarlo. Verificado con un cebo (`prueba-token.txt` → ABORTADO).
+- **Gotcha de TCC:** el plist invoca el intérprete de uv
+  (`~/.local/share/uv/python/.../python3.12`), no `/usr/bin/python3`. Este
+  último no tiene Acceso a Disco Completo y muere con `exit 2` en bucle,
+  registrando *"Operation not permitted"* al leer el script desde `~/Desktop`.
+  Se apunta a la ruta real del binario y no al symlink del venv de
+  `warren-buffett-jr`, para no depender de ese repo.
+- **`launchctl load` responde `Load failed: 5: Input/output error` y carga
+  igual.** No fiarse del mensaje: comprobar con `launchctl list | grep`
+  que hay un PID en la primera columna.
+
+Logs en `web/data/git-autosync.log` y `.err.log` (gitignorados con el resto de
+`/data`).
+
 - **Agente Principal (de Opciones):** primer agente y núcleo del sistema. Su especificación completa está en [Proceso Principal](Agente%20Principal/Proceso%20Principal.md).
 - **Sub Agentes:** aún no definidos. La Tarea 4 (Buy Put) menciona "validación de contexto con **otros agentes**", así que el diseño contempla sub-agentes de confirmación (p. ej. contexto macro, técnico o de noticias).
 
