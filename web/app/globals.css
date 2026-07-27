@@ -881,6 +881,63 @@ tfoot .totals td {
   .card { padding: 18px; }
 }
 
+/* ── iPhone ───────────────────────────────────────────────────────────────
+   La cabecera es UNA fila flex con marca + pestañas + 4 tickers + buscador +
+   precio. En 390px eso no cabe de ninguna manera, así que aquí se reordena en
+   tres filas compactas.
+
+   Y deja de ser sticky: a tres filas ocuparía ~130px, o sea un 15% de la
+   pantalla de un iPhone, permanentemente. En un móvil se scrollea mucho; ese
+   espacio vale más que tener el buscador siempre a la vista. */
+@media (max-width: 640px) {
+  .hb {
+    position: static;
+    height: auto;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+    row-gap: 10px;
+  }
+
+  /* Fila 1: marca a la izquierda, precio a la derecha. */
+  .hb-brand { flex: 1 1 auto; min-width: 0; }
+  .hb-name { font-size: 15px; }
+  .hb-right { flex: none; margin-left: auto; }
+  .hb-price { font-size: 17px; }
+  /* El nombre largo de la empresa no cabe junto al precio; el ticker ya está
+     resaltado en las pastillas de abajo. */
+  .hb-ticker-name { display: none; }
+
+  /* Fila 2 y 3: cada tira ocupa el ancho completo y scrollea en horizontal
+     en vez de comprimirse hasta ser intocable. 44px de alto es el mínimo
+     cómodo para el dedo. */
+  .nav-tabs,
+  .hb-tabs {
+    flex: 1 0 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-tabs::-webkit-scrollbar,
+  .hb-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab, .hb-tab { flex: none; }
+
+  .hb-search { flex: 1 0 100%; width: auto; }
+
+  /* Rejillas cuyo mínimo (360px) supera el ancho útil del teléfono: sin esto
+     desbordan por la derecha en vez de apilarse. */
+  .struct-grid,
+  .legend { grid-template-columns: 1fr; }
+
+  /* La etiqueta de 170px dejaba menos de 110px para la barra. */
+  .sent-part { grid-template-columns: 92px 1fr 34px; gap: 10px; }
+
+  /* Evita el zoom automático de Safari al enfocar un input: iOS hace zoom
+     siempre que la fuente baja de 16px, y luego no lo deshace. */
+  .hb-search, input, select, textarea { font-size: 16px; }
+}
+
 /* Chip de auto-corrección por memoria en el veredicto */
 .verdict-cal { font-size: 11px; font-weight: 700; color: var(--accent);
   background: var(--accent-dim); padding: 3px 9px; border-radius: 999px; cursor: help; }
