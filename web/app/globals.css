@@ -75,10 +75,23 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   flex: none;
 }
-.hb-name { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
+/* `nowrap` porque "Interstellar Options" es bastante más largo que el nombre
+   anterior y la cabecera lo partía en dos líneas, descuadrando su altura. */
+.hb-name {
+  font-weight: 700; font-size: 16px; letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+/* El chip tampoco debe partirse (se rompía en "AI / Options / Agent" al alargar
+   el nombre de la marca). Y es lo PRIMERO que se sacrifica cuando la cabecera
+   se queda sin sitio: es decorativo, mientras que el nombre, los tickers y el
+   buscador no lo son. */
 .hb-chip {
   font-size: 11px; color: var(--muted); background: #f2f4f7;
   border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
+  white-space: nowrap;
+}
+@media (max-width: 1280px) {
+  .hb-chip { display: none; }
 }
 .hb-tabs { display: flex; gap: 6px; }
 .hb-tab {
