@@ -504,6 +504,11 @@ export interface SpreadChainQuote {
   openInterest: number;
   delta: number | null;
   iv: number | null;
+  /** Gamma real de Schwab. Alimenta el GEX sin una segunda llamada. */
+  gamma: number | null;
+  volume: number;
+  /** Último/mark, para el premium abierto que pondera los nodos del GEX. */
+  last: number | null;
 }
 
 export interface SpreadChainResult {
@@ -573,6 +578,10 @@ export async function fetchSpreadChainSchwab(
             delta: typeof c.delta === "number" && Math.abs(c.delta) <= 1 ? c.delta : null,
             // La IV viene en PORCENTAJE (50.301 = 50.3%), como en toRawContract.
             iv: typeof c.volatility === "number" && c.volatility > 0 ? c.volatility / 100 : null,
+            // Mismo centinela -999 que el delta: la gamma es siempre ≥ 0.
+            gamma: typeof c.gamma === "number" && c.gamma >= 0 ? c.gamma : null,
+            volume: c.totalVolume ?? 0,
+            last: c.last ?? c.mark ?? c.closePrice ?? null,
           });
         }
       }
