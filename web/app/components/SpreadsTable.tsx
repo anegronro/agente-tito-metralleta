@@ -8,6 +8,23 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigi
 const money2 = (n: number) => `$${n.toFixed(2)}`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 
+/**
+ * Encaje con el contexto (GEX + flujo + noticias + niveles). Va en la cabecera
+ * de la fila y no escondido en el desplegable: es la diferencia entre "este
+ * spread está bien construido" y "además el mercado empuja a tu favor", y sin
+ * verlo el score de 100 no se puede interpretar.
+ */
+const ALIGN_CLASS: Record<string, string> = {
+  "a favor": "good",
+  neutro: "meh",
+  "en contra": "bad",
+};
+const ALIGN_ICON: Record<string, string> = {
+  "a favor": "▲",
+  neutro: "•",
+  "en contra": "▼",
+};
+
 /** Filtro por estructura. `null` = todas. */
 export type KindFilter = SpreadKind | null;
 
@@ -107,7 +124,12 @@ function SpreadRow({ c, view }: { c: AffordableSpread; view: "estudiante" | "pro
         <span>
           <b>{c.ticker}</b> {c.label} <span className="spread-strikes">{c.strikesLabel}</span> · {c.expiration} ({c.dte}d)
         </span>
-        <span className="wheel-score">{s.total}<small>/100</small></span>
+        <span className="spread-head-right">
+          <span className={`spread-align ${ALIGN_CLASS[s.alignment.band] ?? ""}`}>
+            {ALIGN_ICON[s.alignment.band] ?? ""} {s.alignment.band}
+          </span>
+          <span className="wheel-score">{s.total}<small>/100</small></span>
+        </span>
       </button>
 
       <LegsLine legs={c.legs} />
@@ -128,7 +150,9 @@ function SpreadRow({ c, view }: { c: AffordableSpread; view: "estudiante" | "pro
               <b>No te cabe:</b> te faltan {money(a.shortfall)}.
               {a.suggestedWidth != null && <> Con alas de ~${a.suggestedWidth} sí entraría.</>}
             </>
-          )}
+          )}{" "}
+          {s.alignment.band === "a favor" && <b>El mercado empuja a favor de esta apuesta.</b>}
+          {s.alignment.band === "en contra" && <b>Ojo: el mercado empuja en contra de esta apuesta.</b>}
         </p>
       ) : (
         <div className="wheel-grid">
@@ -161,7 +185,7 @@ function SpreadRow({ c, view }: { c: AffordableSpread; view: "estudiante" | "pro
             </>
           )}
           <div className="wheel-why">
-            {[s.reward, s.pop, s.liquidity, s.ivFit, s.earnings].map((part, i) => (
+            {[s.alignment, s.reward, s.pop, s.liquidity, s.ivFit, s.earnings].map((part, i) => (
               <div key={i}>· {part.why}</div>
             ))}
           </div>

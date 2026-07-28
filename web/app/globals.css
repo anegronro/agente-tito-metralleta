@@ -1192,3 +1192,13 @@ tfoot .totals td {
   .spread-filter { padding-left: 18px; padding-right: 18px; }
   .wheel-preset-facts { gap: 6px 14px; font-size: 12px; }
 }
+
+/* Encaje direccional, en la cabecera de la fila de spread. */
+.spread-head-right { display: flex; align-items: center; gap: 10px; }
+.spread-align {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap; background: #f2f4f7; color: #475467;
+}
+.spread-align.good { background: #dcfae6; color: #067647; }
+.spread-align.bad { background: #fee2e2; color: #b42318; }
+.spread-align.meh { background: #f2f4f7; color: #475467; }
