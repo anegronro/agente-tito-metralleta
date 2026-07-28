@@ -1155,3 +1155,40 @@ tfoot .totals td {
 .wheel-empty { color: var(--muted); }
 .wheel-status { font-size: 14px; font-weight: 600; margin: 4px 0; }
 .wheel-disclaimer { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+
+/* ── Módulo Spreads ──────────────────────────────────────
+   Reutiliza casi todo el módulo Wheel (.wheel-row, .wheel-grid, .wheel-tag…).
+   Aquí solo lo propio: el filtro por estructura y las patas de la posición. */
+.spread-filters {
+  display: flex; gap: 6px; margin: 4px 0 10px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.spread-filters::-webkit-scrollbar { display: none; }
+.spread-filter {
+  font-family: inherit; font-size: 12px; font-weight: 600; white-space: nowrap;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: #fff; color: #344054;
+}
+.spread-filter.on { background: #101828; color: #fff; border-color: #101828; }
+
+/* Las patas son lo que se teclea en el bróker, así que van SIEMPRE visibles y
+   en las dos vistas: sin ellas la fila no es accionable. La vendida va sólida
+   y la comprada perfilada — se distinguen de un vistazo sin usar color, que
+   en esta app ya significa call/put. */
+.spread-legs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.spread-leg {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: #fff; color: #344054;
+}
+.spread-leg.vender { background: #101828; border-color: #101828; color: #fff; }
+.spread-strikes { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+@media (max-width: 640px) {
+  /* NO reducir la altura de .spread-filter: por especificidad (0,1,0) le
+     ganaría al `button { min-height: 44px }` de arriba y volvería a dejar
+     botones que en el iPhone no se pueden pulsar. Se ensancha el toque, no
+     se estrecha. */
+  .spread-filter { padding-left: 18px; padding-right: 18px; }
+  .wheel-preset-facts { gap: 6px 14px; font-size: 12px; }
+}

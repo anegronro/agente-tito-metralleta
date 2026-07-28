@@ -25,7 +25,9 @@ import {
   fetchDailyBarsSchwab,
   fetchOptionChainSchwab,
   fetchQuoteSchwab,
+  fetchSpreadChainSchwab,
   fetchWheelChainSchwab,
+  type SpreadChainResult,
 } from "./schwab";
 import type { CompanyInfo, DailyBar, TfBar } from "./types";
 
@@ -94,6 +96,27 @@ export function fetchWheel(
   return activeProvider() === "schwab"
     ? fetchWheelChainSchwab(ticker, opts)
     : fetchWheelChain(ticker, opts);
+}
+
+/**
+ * Cadena para spreads. **Solo Schwab**, y falla claro si no lo es.
+ *
+ * No hay ruta alternativa por Massive a propósito: su plan no devuelve griegos
+ * y el delta es lo que elige la pata ancla de cada estructura. Estimarlo por
+ * Black-Scholes daría bandas de delta inventadas y, con ellas, spreads que en
+ * la cadena real no existen. Antes que un número plausible pero falso, el
+ * screener dice que no puede.
+ */
+export function fetchSpreads(
+  ticker: string,
+  opts: { dteMin: number; dteMax: number; now?: Date },
+): Promise<SpreadChainResult> {
+  if (activeProvider() !== "schwab") {
+    throw new Error(
+      "El screener de spreads necesita Schwab: Massive no devuelve griegos y sin delta no se puede elegir la pata a vender.",
+    );
+  }
+  return fetchSpreadChainSchwab(ticker, opts);
 }
 
 /** Barras diarias ("YYYY-MM-DD") del proveedor activo. */

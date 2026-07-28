@@ -483,6 +483,109 @@ export async function fetchWheelChainSchwab(
 }
 
 // ---------------------------------------------------------------------------
+// Cadena para spreads: LAS DOS PATAS, con griegos.
+//
+// Aparte de `fetchWheelChainSchwab` por dos motivos que no se pueden reconciliar
+// en una sola función:
+//   · La Wheel pide `contractType: "PUT"` y filtra a OTM. Un iron condor
+//     necesita las dos alas, y un débito necesita el strike cercano al dinero
+//     que la Wheel descarta por definición.
+//   · La Wheel no mira griegos; aquí el delta es lo que ELIGE la pata ancla, y
+//     sin él `buildSpreads` no monta nada (no se inventa un delta estimado).
+// ---------------------------------------------------------------------------
+
+export interface SpreadChainQuote {
+  type: "put" | "call";
+  strike: number;
+  expiration: string;
+  dte: number;
+  bid: number | null;
+  ask: number | null;
+  openInterest: number;
+  delta: number | null;
+  iv: number | null;
+}
+
+export interface SpreadChainResult {
+  spot: number | null;
+  quotes: SpreadChainQuote[];
+}
+
+export async function fetchSpreadChainSchwab(
+  ticker: string,
+  opts: { dteMin: number; dteMax: number; now?: Date },
+): Promise<SpreadChainResult> {
+  const clean = ticker.trim().toUpperCase();
+  if (!clean) throw new SchwabError("Ticker vacío.");
+  const now = opts.now ?? new Date();
+  const day = 24 * 60 * 60 * 1000;
+  const todayETMs = Date.parse(`${marketDateStr(now)}T00:00:00Z`);
+  const fecha = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+  const token = await accessToken();
+  const qs = new URLSearchParams({
+    symbol: schwabSymbol(clean),
+    contractType: "ALL",
+    fromDate: fecha(todayETMs + opts.dteMin * day),
+    toDate: fecha(todayETMs + opts.dteMax * day),
+  });
+
+  const res = await fetch(`${BASE_URL}/marketdata/v1/chains?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new SchwabError(describeStatus(res.status, clean, body), res.status);
+  }
+
+  const json = (await res.json()) as ChainsResponse;
+  if (json.status && json.status !== "SUCCESS") {
+    throw new SchwabError(`Schwab no devolvió cadena para ${clean} (status: ${json.status}).`);
+  }
+
+  const spot = typeof json.underlyingPrice === "number" ? json.underlyingPrice : null;
+  const quotes: SpreadChainQuote[] = [];
+
+  const volcar = (
+    mapa: Record<string, Record<string, SchwabContract[]>> | undefined,
+    type: "put" | "call",
+  ) => {
+    for (const porStrike of Object.values(mapa ?? {})) {
+      for (const contratos of Object.values(porStrike)) {
+        for (const c of contratos) {
+          const strike = c.strikePrice;
+          const expiration = toDateOnly(c.expirationDate);
+          if (!(strike != null && strike > 0) || !expiration) continue;
+          quotes.push({
+            type,
+            strike,
+            expiration,
+            dte:
+              typeof c.daysToExpiration === "number"
+                ? c.daysToExpiration
+                : Math.round((Date.parse(`${expiration}T00:00:00Z`) - todayETMs) / day),
+            bid: c.bid ?? null,
+            ask: c.ask ?? null,
+            openInterest: c.openInterest ?? 0,
+            // Schwab manda -999 en los griegos cuando no los tiene calculados.
+            // Colarlo sería peor que no tenerlo: pasaría cualquier banda de delta.
+            delta: typeof c.delta === "number" && Math.abs(c.delta) <= 1 ? c.delta : null,
+            // La IV viene en PORCENTAJE (50.301 = 50.3%), como en toRawContract.
+            iv: typeof c.volatility === "number" && c.volatility > 0 ? c.volatility / 100 : null,
+          });
+        }
+      }
+    }
+  };
+
+  volcar(json.putExpDateMap, "put");
+  volcar(json.callExpDateMap, "call");
+
+  return { spot, quotes };
+}
+
+// ---------------------------------------------------------------------------
 // Histórico de precios. Verificado contra la API el 2026-07-27 con NVDA:
 // { symbol, empty, candles: [{ open, high, low, close, volume, datetime }] },
 // donde `datetime` es epoch en MILISEGUNDOS (252 velas para un año).

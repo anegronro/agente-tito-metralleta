@@ -59,8 +59,13 @@ export function affordSpread(candidate: SpreadCandidate, profile: RiskProfile): 
   const byCash = Math.floor(account / riskPerContract);
   const maxContracts = Math.max(0, Math.min(byTolerance, byCash));
 
+  // El empate se resuelve comparando los PRESUPUESTOS, no los contratos ya
+  // redondeados: con $900 de tolerancia sobre $1.000 de saldo ambos dan 2
+  // contratos, pero quien aprieta es la tolerancia. Y al 100% de tolerancia los
+  // dos presupuestos son el mismo número, así que manda el saldo — la
+  // tolerancia ya no está restringiendo nada.
   const binding: SpreadBinding | null =
-    maxContracts === 0 ? null : byTolerance <= byCash ? "tolerancia" : "saldo";
+    maxContracts === 0 ? null : riskBudget < account ? "tolerancia" : "saldo";
 
   // Si no cabe ni uno, el ala más estrecha que sí entraría. El ancho y la
   // pérdida máxima son proporcionales, así que la regla de tres es exacta
