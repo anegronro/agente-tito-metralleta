@@ -958,6 +958,11 @@ tfoot .totals td {
   /* El contenedor del toggle crece con sus botones. */
   .view-toggle { padding: 2px; }
 
+  /* El slider del perfil de riesgo (/ideas). Se le da alto táctil SIN tocar
+     `-webkit-appearance`: personalizar el pulgar obliga a redibujar también la
+     pista, y un slider a medias se ve peor que uno nativo algo pequeño. */
+  input[type="range"] { min-height: 44px; }
+
   /* Con 44px de alto, estos necesitan también ancho cómodo. */
   .hb-tab { min-width: 56px; }
 
