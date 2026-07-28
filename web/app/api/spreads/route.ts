@@ -1,27 +1,55 @@
 // GET /api/spreads?preset=balanceado — Screener de verticales e iron condors por SSE.
 //
-// Orquesta I/O y NADA de criterio: todo lo que decide vive en lib/spreads.ts.
-// El saldo NO llega aquí: la ruta devuelve estructuras con su pérdida máxima y
-// la asequibilidad se calcula en el cliente con tito.risk.* de localStorage.
-// Misma frontera que /api/wheel, y por la misma razón.
+// Orquesta I/O y NADA de criterio: todo lo que decide vive en lib/spreads.ts y
+// lib/directional.ts. El saldo NO llega aquí: la ruta devuelve estructuras con
+// su pérdida máxima y la asequibilidad se calcula en el cliente con
+// tito.risk.* de localStorage. Misma frontera que /api/wheel.
+//
+// EL PRESUPUESTO DE LLAMADAS ES EL DISEÑO DE ESTE ARCHIVO. Conectar las tres
+// señales direccionales de forma ingenua serían 40 llamadas de flujo + 40 de
+// noticias por escaneo, y Massive corta a 5 peticiones/minuto. En su lugar:
+//   · GEX      → 0 llamadas. Sale de la MISMA cadena de Schwab que ya se pide,
+//                usando la gamma real que venía en la respuesta y se tiraba.
+//   · Flujo    → 1 llamada. Un escaneo de mercado entero de MarketSnack, igual
+//                que /ideas, y se reparte por ticker.
+//   · Noticias → como mucho NEWS_BUDGET, y solo para los tickers donde el
+//                sesgo ya es fuerte: es ahí donde confirmar o contradecir
+//                cambia una decisión.
 
 import { fetchSpreads } from "@/lib/marketData";
 import { cachedDailyBars } from "@/lib/barsStore";
+import { findLevels, type LvlBar } from "@/lib/levels";
 import { realizedVolSeries, rankWithin } from "@/lib/ivcontext";
 import { earningsForTicker } from "@/lib/earnings";
+import { fetchMarketFlow } from "@/lib/marketsnack";
+import { classifyFlow } from "@/lib/flow";
+import { fetchTickerNews, newsBias } from "@/lib/news";
+import { gexAnalysis } from "@/lib/gex";
 import {
-  SPREAD_PRESETS, buildSpreads,
-  type SpreadPresetId, type SpreadCandidate,
+  callPremiumPctByTicker, combineBias, flowVote, gexVote, newsVote,
+  type DirectionalContext,
+} from "@/lib/directional";
+import {
+  SPREAD_PRESETS, buildSpreads, scoreSpread,
+  type SpreadPresetId, type SpreadCandidate, type EarningsFlag,
 } from "@/lib/spreads";
 import { WHEEL_UNIVERSE } from "@/lib/wheelUniverse";
+import type { Level } from "@/lib/levels";
+import type { Row } from "@/lib/types";
 import type { SpreadSseEvent } from "@/app/spreads/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Más bajo que el 6 de la Wheel: aquí cada ticket pide la cadena ENTERA
+// Más bajo que el 6 de la Wheel: aquí cada ticker pide la cadena ENTERA
 // (calls y puts), así que las respuestas son del orden del doble de grandes.
 const CONCURRENCY = 4;
+
+/** Tope de tickers a los que se les piden noticias. Ver la nota de arriba. */
+const NEWS_BUDGET = 10;
+
+/** Convicción mínima (de GEX+flujo) para que valga la pena gastar una noticia. */
+const NEWS_MIN_STRENGTH = 15;
 
 function sse(event: SpreadSseEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
@@ -44,6 +72,42 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Pr
   return out;
 }
 
+/**
+ * Flujo de todo el mercado en una llamada → % de premium en calls por ticker.
+ *
+ * Si MarketSnack falla (la cookie caduca cada pocos días) se devuelve un mapa
+ * vacío y el escaneo sigue: `combineBias` renormaliza sobre las fuentes que sí
+ * están, así que se pierde precisión pero no la página. Es la misma decisión
+ * que hay en el resto del agente — degradar, no caerse.
+ */
+async function marketFlowBias(now: Date): Promise<Map<string, number>> {
+  try {
+    const { trades } = await fetchMarketFlow({ period: "1d", maxPages: 8, minPremium: 250_000 });
+    const { rows } = classifyFlow(trades, now);
+    return callPremiumPctByTicker(rows);
+  } catch {
+    return new Map();
+  }
+}
+
+/** Los campos de `Row` que `gexAnalysis` mira; el resto son relleno inocuo. */
+function rowsForGex(quotes: Awaited<ReturnType<typeof fetchSpreads>>["quotes"]): Row[] {
+  return quotes.map((q) => ({
+    optionTicker: `${q.type}-${q.strike}-${q.expiration}`,
+    contractType: q.type,
+    expiration: q.expiration,
+    strike: q.strike,
+    openInterest: q.openInterest,
+    volume: q.volume,
+    price: q.last,
+    priceSource: "last_trade" as const,
+    openPremium: q.last != null ? q.last * q.openInterest : null,
+    notionalValue: q.strike * 100 * q.openInterest,
+    gamma: q.gamma ?? undefined,
+    iv: q.iv ?? undefined,
+  }));
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const presetParam = url.searchParams.get("preset");
@@ -56,8 +120,22 @@ export async function GET(req: Request) {
       const send = (e: SpreadSseEvent) => controller.enqueue(encoder.encode(sse(e)));
       let failed = 0;
       const all: SpreadCandidate[] = [];
+      // Lo que hace falta para volver a puntuar sin pedir de nuevo la cadena.
+      const contexto = new Map<string, {
+        ctx: DirectionalContext; supports: Level[]; resistances: Level[]; spot: number;
+        ivRank: number | null; callPct: number | null; earnings: EarningsFlag;
+      }>();
 
       try {
+        send({ type: "step", label: "Leyendo el flujo de todo el mercado…" });
+        const flowPct = await marketFlowBias(now);
+        send({
+          type: "step",
+          label: flowPct.size > 0
+            ? `Flujo con dirección en ${flowPct.size} tickers`
+            : "Sin flujo disponible (se sigue con GEX y niveles)",
+        });
+
         send({ type: "step", label: `Escaneando ${WHEEL_UNIVERSE.length} tickers · preset ${preset.label}` });
 
         await mapLimit(WHEEL_UNIVERSE, CONCURRENCY, async (sym) => {
@@ -70,11 +148,31 @@ export async function GET(req: Request) {
               send({ type: "step", label: `${sym.ticker}: sin cadena` });
               return;
             }
+            const spot = chain.spot;
 
-            // IV Rank propio por volatilidad realizada, igual que la Wheel:
-            // no hay serie histórica de IV implícita.
             const bars = await cachedDailyBars(sym.ticker, 365, now);
-            const rvSeries = realizedVolSeries(bars.map((b) => b.close), 30);
+            const closes = bars.map((b) => b.close);
+
+            // ── Señal 1: niveles de precio ──
+            const lvlBars: LvlBar[] = bars.map((b) => ({ time: b.time, high: b.high, low: b.low, close: b.close }));
+            const levels = findLevels({ bars: lvlBars, spot, now });
+
+            // ── Señal 2: imán de gamma, de la cadena que ya tenemos ──
+            // OJO: es el GEX de la VENTANA de vencimientos del preset (30-45d),
+            // no el de la cadena completa del panel Pro. Es a propósito —para
+            // un spread a 40 días manda la gamma de esos vencimientos, no la
+            // del viernes que viene— pero no son el mismo número.
+            const gex = gexAnalysis({ rows: rowsForGex(chain.quotes), closes, spot, now });
+
+            // ── Señal 3: flujo (del escaneo único de arriba) ──
+            const callPct = flowPct.get(sym.ticker) ?? null;
+
+            const ctx = combineBias(
+              [gexVote(gex.kingStrike, spot), flowVote(callPct)],
+              gex.kingStrike,
+            );
+
+            const rvSeries = realizedVolSeries(closes, 30);
             const currentRv = rvSeries.length > 0 ? rvSeries[rvSeries.length - 1] : null;
             const ivRank = currentRv != null ? rankWithin(rvSeries, currentRv) : null;
 
@@ -84,24 +182,60 @@ export async function GET(req: Request) {
             });
 
             const cands = buildSpreads({
-              ticker: sym.ticker,
-              spot: chain.spot,
-              quotes: chain.quotes,
-              preset,
-              ivRank,
-              earnings,
+              ticker: sym.ticker, spot, quotes: chain.quotes, preset, ivRank, earnings,
               fallbackIv: currentRv != null ? currentRv / 100 : 0.4,
+              ctx, supports: levels.supports, resistances: levels.resistances,
             });
             all.push(...cands);
+            contexto.set(sym.ticker, {
+              ctx, supports: levels.supports, resistances: levels.resistances,
+              spot, ivRank, callPct, earnings,
+            });
             send({
               type: "step",
-              label: `${sym.ticker}: ${cands.filter((c) => !c.blocked).length} estructuras`,
+              label: `${sym.ticker}: ${cands.filter((c) => !c.blocked).length} estructuras · ${ctx.bias}`,
             });
           } catch {
             failed++;
             send({ type: "step", label: `${sym.ticker}: error` });
           }
         });
+
+        // ── Tercera señal: noticias, solo donde cambian algo ──
+        //
+        // Se gastan las peticiones en los tickers con más convicción de GEX y
+        // flujo: si el sesgo es tibio, una noticia no lo va a inclinar lo
+        // suficiente como para mover el ranking, y Massive tiene un cupo muy
+        // corto. Re-puntuar es barato porque `scoreSpread` es puro y no
+        // necesita volver a pedir la cadena.
+        const objetivos = [...contexto.entries()]
+          .filter(([t, c]) => c.ctx.strength >= NEWS_MIN_STRENGTH && all.some((x) => x.ticker === t && !x.blocked))
+          .sort((a, b) => b[1].ctx.strength - a[1].ctx.strength)
+          .slice(0, NEWS_BUDGET);
+
+        if (objetivos.length > 0) {
+          send({ type: "step", label: `Confirmando con noticias en ${objetivos.length} tickers…` });
+          for (const [ticker, c] of objetivos) {
+            try {
+              const items = await fetchTickerNews(ticker, 12);
+              const nb = newsBias(items, now);
+              const nuevo = combineBias(
+                [gexVote(c.ctx.magnet, c.spot), flowVote(c.callPct), newsVote(nb)],
+                c.ctx.magnet,
+              );
+              for (const cand of all) {
+                if (cand.ticker !== ticker || cand.blocked || !cand.metrics) continue;
+                cand.score = scoreSpread({
+                  kind: cand.kind, metrics: cand.metrics, legs: cand.legs,
+                  ivRank: c.ivRank, earnings: c.earnings, spot: c.spot,
+                  ctx: nuevo, supports: c.supports, resistances: c.resistances,
+                });
+              }
+            } catch {
+              // Sin noticias para este ticker: se queda con el sesgo de GEX+flujo.
+            }
+          }
+        }
 
         all.sort((a, b) => {
           if (a.blocked !== b.blocked) return a.blocked ? 1 : -1;
