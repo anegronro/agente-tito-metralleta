@@ -37,6 +37,10 @@ export const metadata: Metadata = {
     title: "Interstellar",
     statusBarStyle: "default",
   },
+  // Next 15 emite el nombre moderno (`mobile-web-app-capable`) y ya no el de
+  // Apple. Los iOS anteriores al 17 solo entienden el viejo, así que se pone a
+  // mano: sin él, el atajo abriría dentro de Safari con su barra de direcciones.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 // Sin `viewportFit: "cover"` a propósito: así iOS mantiene el contenido dentro
