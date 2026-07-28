@@ -102,24 +102,29 @@ export interface SpreadPreset {
 }
 
 export const SPREAD_PRESETS: Record<SpreadPresetId, SpreadPreset> = {
+  // Las bandas NO se solapan, igual que en wheel.ts: si se solaparan, dos
+  // presets podrían devolver el mismo spread y el selector dejaría de
+  // significar algo. `shortDelta` sube con la agresividad (más cerca del
+  // dinero) y `longDelta` BAJA (compras menos delta, más barato y más
+  // improbable) — por eso van en sentidos opuestos.
   conservador: {
     id: "conservador", label: "Conservador",
-    shortDeltaMin: 0.08, shortDeltaMax: 0.18,
-    longDeltaMin: 0.55, longDeltaMax: 0.75,
+    shortDeltaMin: 0.08, shortDeltaMax: 0.15,
+    longDeltaMin: 0.60, longDeltaMax: 0.75,
     dteMin: 30, dteMax: 45, maxWidth: 5, takeProfitPct: 50,
     explain: "Alas estrechas y strikes lejos: arriesgas poco por operación y ganas casi siempre, pero poquito.",
   },
   balanceado: {
     id: "balanceado", label: "Balanceado",
-    shortDeltaMin: 0.15, shortDeltaMax: 0.30,
-    longDeltaMin: 0.45, longDeltaMax: 0.65,
+    shortDeltaMin: 0.15, shortDeltaMax: 0.28,
+    longDeltaMin: 0.45, longDeltaMax: 0.60,
     dteMin: 30, dteMax: 45, maxWidth: 10, takeProfitPct: 50,
     explain: "El punto medio: crédito decente y probabilidad todavía a tu favor.",
   },
   agresivo: {
     id: "agresivo", label: "Agresivo",
-    shortDeltaMin: 0.25, shortDeltaMax: 0.42,
-    longDeltaMin: 0.35, longDeltaMax: 0.60,
+    shortDeltaMin: 0.28, shortDeltaMax: 0.42,
+    longDeltaMin: 0.30, longDeltaMax: 0.45,
     dteMin: 7, dteMax: 30, maxWidth: 15, takeProfitPct: 50,
     explain: "Cerca del dinero y a poco plazo: cobras mucho más y pierdes bastante más a menudo.",
   },
