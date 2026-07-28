@@ -120,6 +120,46 @@ export function combineBias(votes: (BiasVote | null)[], magnet: number | null = 
   return { bias, score, strength: Math.abs(score), magnet, votes: presentes };
 }
 
+// ── Flujo: de un escaneo de mercado a un % por ticker ──────────────────
+
+/** Lo mínimo de un `FlowRow` para medir dirección. */
+export interface FlowLite {
+  underlying: string;
+  type: "call" | "put" | "unknown";
+  premium: number;
+}
+
+/**
+ * % del premium que va a calls, por ticker. Es el insumo de `flowVote`.
+ *
+ * Se pondera por DINERO y no por número de operaciones: mil lotes de $200 no
+ * dicen lo que dice una sola de $2M, y contar transacciones dejaría que el
+ * ruido minorista tapara al que de verdad está posicionándose.
+ *
+ * Se exige un mínimo de premium por ticker (`minPremium`) porque con dos
+ * operaciones sueltas el porcentaje salta entre 0 y 100 y fabricaría
+ * convicciones que no existen.
+ */
+export function callPremiumPctByTicker(
+  rows: FlowLite[],
+  minPremium = 250_000,
+): Map<string, number> {
+  const acc = new Map<string, { calls: number; total: number }>();
+  for (const r of rows) {
+    if (r.type === "unknown" || !(r.premium > 0) || !r.underlying) continue;
+    const a = acc.get(r.underlying) ?? { calls: 0, total: 0 };
+    a.total += r.premium;
+    if (r.type === "call") a.calls += r.premium;
+    acc.set(r.underlying, a);
+  }
+  const out = new Map<string, number>();
+  for (const [ticker, a] of acc) {
+    if (a.total < minPremium) continue;
+    out.set(ticker, (a.calls / a.total) * 100);
+  }
+  return out;
+}
+
 // ── Colocación del strike frente a los niveles ─────────────────────────
 
 export type LevelFit = "protegido" | "expuesto" | "sin_nivel";
