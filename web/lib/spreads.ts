@@ -456,22 +456,151 @@ function earningsPart(flag: EarningsFlag, family: SpreadFamily): ScorePart {
   }
 }
 
+/** Qué contexto favorece a cada estructura. `null` = quiere que no pase nada. */
+function wantsBias(kind: SpreadKind): "bullish" | "bearish" | null {
+  switch (kind) {
+    case "put_credit": case "call_debit": return "bullish";
+    case "call_credit": case "put_debit": return "bearish";
+    case "iron_condor": return null;
+  }
+}
+
+/**
+ * Encaje con el contexto: la pieza que antes faltaba.
+ *
+ * Dos mitades con pesos distintos a propósito. El **contexto** (GEX + flujo +
+ * noticias) dice hacia dónde empuja el mercado; el **nivel** dice si el strike
+ * concreto está detrás de algo que lo proteja. La segunda es más específica
+ * pero también más frágil —depende de que `findLevels` haya encontrado
+ * pivotes—, así que pesa menos.
+ *
+ * Un contexto NEUTRAL no penaliza a las direccionales, solo deja de premiarlas:
+ * castigar por falta de señal convertiría el ranking en un ranking de tickers
+ * con noticias, que no es lo que se busca.
+ */
+export function alignmentPart(input: {
+  kind: SpreadKind;
+  legs: Leg[];
+  spot: number;
+  metrics: SpreadMetrics;
+  ctx: DirectionalContext;
+  supports: Level[];
+  resistances: Level[];
+}): ScorePart {
+  const { kind, legs, spot, metrics, ctx, supports, resistances } = input;
+  const quiere = wantsBias(kind);
+  const razones: string[] = [];
+
+  // ── Mitad 1: contexto direccional (12 de 20) ──
+  let ctxPts = 6; // neutro = ni premio ni castigo
+  if (kind === "iron_condor") {
+    // El condor quiere que NO pase nada: aquí la convicción es el enemigo.
+    if (ctx.strength < 20) { ctxPts = 12; razones.push("Sin dirección clara — justo lo que necesita un condor."); }
+    else if (ctx.strength < 40) { ctxPts = 7; razones.push("Hay algo de dirección: un condor prefiere el mercado quieto."); }
+    else { ctxPts = 1; razones.push(`El mercado empuja con fuerza (${Math.round(ctx.strength)}/100): mal momento para vender las dos alas.`); }
+  } else if (ctx.bias === "neutral" || ctx.bias === "mixed") {
+    ctxPts = 6;
+    razones.push(ctx.bias === "mixed"
+      ? "Las señales se contradicen entre sí: sin sesgo utilizable."
+      : "Sin sesgo direccional claro en el subyacente.");
+  } else {
+    const aFavor = ctx.bias === quiere;
+    const fuerte = ctx.strength >= 40;
+    if (aFavor) {
+      ctxPts = fuerte ? 12 : 9;
+      razones.push(`El contexto es ${ctx.bias === "bullish" ? "alcista" : "bajista"} y la estructura apuesta en esa dirección.`);
+    } else {
+      // Un débito remando contra el contexto es lo más caro de todo: pagas por
+      // un movimiento que las tres fuentes dicen que no va a pasar.
+      ctxPts = familyOf(kind) === "debito" ? 0 : fuerte ? 1 : 3;
+      razones.push(`El contexto es ${ctx.bias === "bullish" ? "alcista" : "bajista"} y esta estructura apuesta lo contrario.`);
+    }
+  }
+  for (const v of ctx.votes) razones.push(v.why);
+
+  // ── Mitad 2: niveles (8 de 20) ──
+  let lvlPts = 4;
+  if (familyOf(kind) === "credito") {
+    // En un crédito lo que importa es dónde está la pata VENDIDA. En un condor
+    // se exigen las dos: la protección vale lo que valga su lado más débil.
+    const checks = legs
+      .filter((l) => l.action === "vender")
+      .map((l) => checkLevel({ shortStrike: l.strike, side: l.type, supports, resistances }));
+
+    if (checks.length > 0) {
+      const expuesta = checks.find((c) => c.fit === "expuesto");
+      const floja = checks.find((c) => c.fit === "sin_nivel");
+      if (expuesta) { lvlPts = 1; razones.push(expuesta.why); }
+      else if (floja) { lvlPts = 4; razones.push(floja.why); }
+      else { lvlPts = 8; razones.push(...checks.map((c) => c.why)); }
+    }
+  } else {
+    // En un débito el objetivo es el strike vendido: hasta ahí llega la ganancia.
+    const objetivo = legs.find((l) => l.action === "vender")?.strike ?? metrics.breakevens[0];
+    const camino = checkPath({ spot, target: objetivo, supports, resistances });
+    lvlPts = camino.fit === "protegido" ? 8 : camino.fit === "expuesto" ? 1 : 4;
+    razones.push(camino.why);
+  }
+
+  const points = ctxPts + lvlPts;
+  const band = points >= 15 ? "a favor" : points >= 8 ? "neutro" : "en contra";
+  return { points, max: 20, band, why: razones.join(" ") };
+}
+
+/**
+ * Reparto de los 100 puntos.
+ *
+ * Está en una tabla y no repartido por las funciones de banda a propósito: al
+ * entrar `alignment` hubo que hacerle sitio, y sin esta tabla habría tocado
+ * reescribir a mano cada banda de cada componente —con el riesgo de que la suma
+ * dejara de dar 100 sin que nadie se enterara—. Cada `*Part` sigue puntuando en
+ * su escala propia y `rescale` la proyecta aquí. Para retocar el peso de algo,
+ * este es el único sitio.
+ */
+export const WEIGHTS = {
+  reward: 25,
+  pop: 20,
+  liquidity: 15,
+  ivFit: 12,
+  earnings: 8,
+  alignment: 20,
+} as const;
+
+function rescale(part: ScorePart, max: number): ScorePart {
+  return { ...part, points: Math.round((part.points / part.max) * max), max };
+}
+
 export function scoreSpread(input: {
   kind: SpreadKind;
   metrics: SpreadMetrics;
   legs: Leg[];
   ivRank: number | null;
   earnings: EarningsFlag;
+  spot?: number;
+  /** Sin contexto se asume neutral: el screener sigue funcionando sin él. */
+  ctx?: DirectionalContext;
+  supports?: Level[];
+  resistances?: Level[];
 }): SpreadScore {
   const family = familyOf(input.kind);
-  const reward = rewardPart(input.metrics.returnOnRisk, family);
-  const pop = popPart(input.metrics.pop);
-  const liquidity = liquidityPart(input.legs);
-  const ivFit = ivFitPart(input.ivRank, family);
-  const earnings = earningsPart(input.earnings, family);
+  const reward = rescale(rewardPart(input.metrics.returnOnRisk, family), WEIGHTS.reward);
+  const pop = rescale(popPart(input.metrics.pop), WEIGHTS.pop);
+  const liquidity = rescale(liquidityPart(input.legs), WEIGHTS.liquidity);
+  const ivFit = rescale(ivFitPart(input.ivRank, family), WEIGHTS.ivFit);
+  const earnings = rescale(earningsPart(input.earnings, family), WEIGHTS.earnings);
+  const alignment = alignmentPart({
+    kind: input.kind,
+    legs: input.legs,
+    spot: input.spot ?? input.metrics.breakevens[0],
+    metrics: input.metrics,
+    ctx: input.ctx ?? NEUTRAL,
+    supports: input.supports ?? [],
+    resistances: input.resistances ?? [],
+  });
+
   return {
-    total: reward.points + pop.points + liquidity.points + ivFit.points + earnings.points,
-    reward, pop, liquidity, ivFit, earnings,
+    total: reward.points + pop.points + liquidity.points + ivFit.points + earnings.points + alignment.points,
+    reward, pop, liquidity, ivFit, earnings, alignment,
   };
 }
 
@@ -539,6 +668,10 @@ export interface BuildInput {
   fallbackIv: number;
   /** Cuántos candidatos conservar por tipo de estructura. */
   perKind?: number;
+  /** Contexto direccional del ticker. Sin él todo se puntúa como neutral. */
+  ctx?: DirectionalContext;
+  supports?: Level[];
+  resistances?: Level[];
 }
 
 /** Agrupa por vencimiento y tipo, con los strikes ordenados. */
@@ -578,6 +711,9 @@ function enBanda(q: SpreadQuote, min: number, max: number): boolean {
 export function buildSpreads(input: BuildInput): SpreadCandidate[] {
   const { ticker, spot, quotes, preset, ivRank, earnings, fallbackIv } = input;
   const perKind = input.perKind ?? 2;
+  const ctx = input.ctx ?? NEUTRAL;
+  const supports = input.supports ?? [];
+  const resistances = input.resistances ?? [];
   if (!(spot > 0)) return [];
 
   const ivPorExp = atmIvByExpiry(quotes, spot);
@@ -614,7 +750,7 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
     return {
       ticker, kind, label: SPREAD_LABEL[kind], thesis: SPREAD_THESIS[kind],
       expiration: ancla.expiration, dte, spot, legs, metrics,
-      score: scoreSpread({ kind, metrics, legs, ivRank, earnings }),
+      score: scoreSpread({ kind, metrics, legs, ivRank, earnings, spot, ctx, supports, resistances }),
       blocked: false, blockReason: null,
       strikesLabel: strikesLabel(legs),
     };
@@ -685,7 +821,7 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
           ticker, kind: "iron_condor",
           label: SPREAD_LABEL.iron_condor, thesis: SPREAD_THESIS.iron_condor,
           expiration: exp, dte, spot, legs, metrics,
-          score: scoreSpread({ kind: "iron_condor", metrics, legs, ivRank, earnings }),
+          score: scoreSpread({ kind: "iron_condor", metrics, legs, ivRank, earnings, spot, ctx, supports, resistances }),
           blocked: false, blockReason: null,
           strikesLabel: strikesLabel(legs),
         });
