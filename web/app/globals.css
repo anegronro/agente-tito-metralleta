@@ -936,6 +936,37 @@ tfoot .totals td {
   /* Evita el zoom automático de Safari al enfocar un input: iOS hace zoom
      siempre que la fuente baja de 16px, y luego no lo deshace. */
   .hb-search, input, select, textarea { font-size: 16px; }
+
+  /* ── Área táctil mínima ────────────────────────────────────────────────
+     Apple fija 44×44 puntos como mínimo para el dedo. Estos controles venían
+     de 29 a 33px de alto, diseñados para un ratón: en el iPhone el toque
+     fallaba la mayoría de las veces y parecía que el botón "no funcionaba"
+     (reportado con el de Pro). No es cosmética, es que no se podían pulsar.
+
+     Se agranda el área, no la letra: el padding vertical crece y el texto
+     queda igual. */
+  .view-toggle button,
+  .nav-tab,
+  .hb-tab,
+  .horizon-tabs button,
+  .preset-btn,
+  .btn,
+  button {
+    min-height: 44px;
+  }
+
+  /* El contenedor del toggle crece con sus botones. */
+  .view-toggle { padding: 2px; }
+
+  /* Con 44px de alto, estos necesitan también ancho cómodo. */
+  .hb-tab { min-width: 56px; }
+
+  /* iOS deja pegado el estado :hover tras un toque, así que un botón toc
+     ado se queda "resaltado" hasta que tocas otra cosa. Solo se aplica
+     donde de verdad hay puntero. */
+  @media (hover: none) {
+    .view-toggle button:not(.active):hover { color: var(--muted); }
+  }
 }
 
 /* Chip de auto-corrección por memoria en el veredicto */
