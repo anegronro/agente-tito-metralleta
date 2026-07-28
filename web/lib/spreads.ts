@@ -14,6 +14,8 @@
 
 import { probAbove, probInBand } from "./expectedMove";
 import { liquidityBlock, spreadPctOf, type WheelBlockReason } from "./wheel";
+import { checkLevel, checkPath, NEUTRAL, type DirectionalContext } from "./directional";
+import type { Level } from "./levels";
 
 const MULTIPLIER = 100;
 
@@ -319,6 +321,8 @@ export interface SpreadScore {
   liquidity: ScorePart;
   ivFit: ScorePart;
   earnings: ScorePart;
+  /** Encaje con el contexto direccional (GEX + flujo + noticias + niveles). */
+  alignment: ScorePart;
 }
 
 export type EarningsFlag = "fuera" | "dentro" | "dentro_confirmado" | "no_aplica";
