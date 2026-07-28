@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   SPREAD_PRESETS,
+  WEIGHTS,
+  alignmentPart,
   atmIvByExpiry,
   buildSpreads,
   condorMetrics,
@@ -15,6 +17,7 @@ import {
   type Leg,
   type SpreadQuote,
 } from "./spreads";
+import type { DirectionalContext } from "./directional";
 
 /** Fila de cadena con valores sanos por defecto; se sobreescribe lo que interese. */
 function quote(over: Partial<SpreadQuote> & Pick<SpreadQuote, "type" | "strike">): SpreadQuote {
@@ -240,10 +243,105 @@ describe("scoreSpread", () => {
   const legs = [leg("vender", "put", 100, 2.0), leg("comprar", "put", 95, 0.8)];
   const m = verticalMetrics({ kind: "put_credit", legs, spot: 110, dte: 40, iv: 0.35 })!;
 
-  it("suma como mucho 100", () => {
+  it("suma como mucho 100 y el total es la suma de sus partes", () => {
     const s = scoreSpread({ kind: "put_credit", metrics: m, legs, ivRank: 80, earnings: "fuera" });
     expect(s.total).toBeLessThanOrEqual(100);
-    expect(s.total).toBe(s.reward.points + s.pop.points + s.liquidity.points + s.ivFit.points + s.earnings.points);
+    expect(s.total).toBe(
+      s.reward.points + s.pop.points + s.liquidity.points +
+      s.ivFit.points + s.earnings.points + s.alignment.points,
+    );
+  });
+
+  it("los pesos declarados suman exactamente 100", () => {
+    expect(Object.values(WEIGHTS).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it("ningún componente puede pasarse de su peso", () => {
+    // El rescalado proyecta cada banda a su peso: si una `*Part` devolviera más
+    // puntos que su propio `max`, el total se saldría de 100 sin avisar.
+    for (const ivRank of [null, 10, 55, 90]) {
+      for (const earnings of ["fuera", "dentro", "dentro_confirmado", "no_aplica"] as const) {
+        const s = scoreSpread({ kind: "put_credit", metrics: m, legs, ivRank, earnings });
+        expect(s.reward.points).toBeLessThanOrEqual(WEIGHTS.reward);
+        expect(s.pop.points).toBeLessThanOrEqual(WEIGHTS.pop);
+        expect(s.liquidity.points).toBeLessThanOrEqual(WEIGHTS.liquidity);
+        expect(s.ivFit.points).toBeLessThanOrEqual(WEIGHTS.ivFit);
+        expect(s.earnings.points).toBeLessThanOrEqual(WEIGHTS.earnings);
+        expect(s.alignment.points).toBeLessThanOrEqual(WEIGHTS.alignment);
+        expect(s.total).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it("sin contexto NO se cae: puntúa como neutral", () => {
+    const s = scoreSpread({ kind: "call_debit", metrics: m, legs, ivRank: 50, earnings: "fuera" });
+    expect(s.alignment.points).toBeGreaterThan(0);
+    expect(Number.isFinite(s.total)).toBe(true);
+  });
+});
+
+describe("alignmentPart — el contexto direccional", () => {
+  const legs = [leg("vender", "put", 100, 2.0), leg("comprar", "put", 95, 0.8)];
+  const m = verticalMetrics({ kind: "put_credit", legs, spot: 110, dte: 40, iv: 0.35 })!;
+  const debLegs = [leg("comprar", "call", 110, 5), leg("vender", "call", 115, 3)];
+  const dm = verticalMetrics({ kind: "call_debit", legs: debLegs, spot: 110, dte: 40, iv: 0.35 })!;
+
+  /** Contexto sintético con el sesgo y la fuerza que se pidan. */
+  function ctx(bias: "bullish" | "bearish" | "neutral", strength = 60): DirectionalContext {
+    return {
+      bias, strength,
+      score: bias === "bullish" ? strength : bias === "bearish" ? -strength : 0,
+      magnet: null, votes: [],
+    };
+  }
+
+  const base = { spot: 110, supports: [], resistances: [] };
+
+  it("premia al crédito que apuesta CON el contexto", () => {
+    const aFavor = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("bullish"), ...base });
+    const enContra = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("bearish"), ...base });
+    expect(aFavor.points).toBeGreaterThan(enContra.points);
+  });
+
+  it("un DÉBITO contra el contexto se lleva el castigo máximo", () => {
+    // Pagar por un movimiento que las tres fuentes dicen que no va a pasar es
+    // lo más caro que se puede hacer: peor que un crédito mal orientado.
+    //
+    // Se compara la CAÍDA respecto a neutral dentro de cada estructura, no el
+    // total entre las dos: el crédito se juzga por dónde cae su strike
+    // (`checkLevel`) y el débito por si el camino está libre (`checkPath`), así
+    // que sus mitades de nivel no son comparables entre sí y taparían el efecto.
+    const caida = (kind: "call_debit" | "put_credit", ls: Leg[], mm: typeof m) =>
+      alignmentPart({ kind, legs: ls, metrics: mm, ctx: ctx("neutral", 0), ...base }).points -
+      alignmentPart({ kind, legs: ls, metrics: mm, ctx: ctx("bearish", 60), ...base }).points;
+
+    expect(caida("call_debit", debLegs, dm)).toBeGreaterThan(caida("put_credit", legs, m));
+  });
+
+  it("EL CONDOR SE PUNTÚA AL REVÉS: la convicción es su enemiga", () => {
+    const cLegs = [...legs, leg("vender", "call", 120, 1.8), leg("comprar", "call", 125, 0.6)];
+    const cm = condorMetrics({
+      putLegs: legs, callLegs: [leg("vender", "call", 120, 1.8), leg("comprar", "call", 125, 0.6)],
+      spot: 110, dte: 40, iv: 0.35,
+    })!;
+    const quieto = alignmentPart({ kind: "iron_condor", legs: cLegs, metrics: cm, ctx: ctx("neutral", 5), ...base });
+    const movido = alignmentPart({ kind: "iron_condor", legs: cLegs, metrics: cm, ctx: ctx("bullish", 70), ...base });
+    expect(quieto.points).toBeGreaterThan(movido.points);
+  });
+
+  it("un contexto neutral no castiga a las direccionales, solo deja de premiar", () => {
+    const neutral = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("neutral", 0), ...base });
+    const contra = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("bearish", 60), ...base });
+    const favor = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("bullish", 60), ...base });
+    expect(neutral.points).toBeGreaterThan(contra.points);
+    expect(neutral.points).toBeLessThan(favor.points);
+  });
+
+  it("un soporte fuerte por encima del put vendido suma", () => {
+    const soporte = [{ price: 104, kind: "support", strength: 70, distancePct: 5, sources: {} , flipped: false, why: "" }] as never;
+    const con = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("neutral", 0), spot: 110, supports: soporte, resistances: [] });
+    const sin = alignmentPart({ kind: "put_credit", legs, metrics: m, ctx: ctx("neutral", 0), ...base });
+    expect(con.points).toBeGreaterThan(sin.points);
   });
 
   it("LA IV SE PUNTÚA AL REVÉS según vendas o compres prima", () => {
