@@ -1202,3 +1202,23 @@ tfoot .totals td {
 .spread-align.good { background: #dcfae6; color: #067647; }
 .spread-align.bad { background: #fee2e2; color: #b42318; }
 .spread-align.meh { background: #f2f4f7; color: #475467; }
+
+/* ── Sincronización del perfil entre dispositivos ────── */
+.risk-sync { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.risk-sync-toggle {
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  background: none; border: 0; padding: 0; color: var(--muted);
+}
+.risk-sync-toggle:hover { color: var(--text); }
+.risk-sync-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.risk-sync-body .muted { font-size: 12px; line-height: 1.5; margin: 0; }
+.risk-sync-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.risk-sync-row .risk-input { flex: 1 1 180px; min-width: 140px; }
+.risk-sync-off {
+  font-family: inherit; font-size: 12px; cursor: pointer;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; color: var(--muted);
+}
+.risk-sync-msg { font-size: 12px; margin: 0; }
+.risk-sync-msg.good { color: #067647; }
+.risk-sync-msg.bad { color: #b42318; }
