@@ -2,7 +2,7 @@
 
 import { SPREAD_PRESETS, type SpreadPresetId } from "@/lib/spreads";
 
-const ORDER: SpreadPresetId[] = ["conservador", "balanceado", "agresivo"];
+const ORDER: SpreadPresetId[] = ["conservador", "balanceado", "agresivo", "0dte"];
 
 export default function SpreadPresetCard({
   preset,
@@ -34,11 +34,15 @@ export default function SpreadPresetCard({
         ))}
       </div>
       <p className="wheel-preset-explain">{active.explain}</p>
+      {active.warning && <p className="preset-warning">⚠ {active.warning}</p>}
       <div className="wheel-preset-facts">
         <span>Delta que vendes <b>{active.shortDeltaMin.toFixed(2)}–{active.shortDeltaMax.toFixed(2)}</b></span>
         <span>Delta que compras <b>{active.longDeltaMin.toFixed(2)}–{active.longDeltaMax.toFixed(2)}</b></span>
         <span>Ancho máximo <b>${active.maxWidth}</b></span>
-        <span>Vencimiento <b>{active.dteMin}–{active.dteMax} días</b></span>
+        <span>
+          Vencimiento{" "}
+          <b>{active.zeroDte ? "hoy mismo" : `${active.dteMin}–${active.dteMax} días`}</b>
+        </span>
         <span>Cierra al <b>{active.takeProfitPct}%</b> del crédito</span>
       </div>
     </div>

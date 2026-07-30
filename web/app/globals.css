@@ -1222,3 +1222,10 @@ tfoot .totals td {
 .risk-sync-msg { font-size: 12px; margin: 0; }
 .risk-sync-msg.good { color: #067647; }
 .risk-sync-msg.bad { color: #b42318; }
+
+/* Aviso del preset 0DTE: va bajo la explicación, no escondido. */
+.preset-warning {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+  background: #fffaeb; border: 1px solid #fedf89; color: #b54708;
+  font-size: 13px; line-height: 1.5;
+}

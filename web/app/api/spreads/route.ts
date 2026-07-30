@@ -56,7 +56,7 @@ function sse(event: SpreadSseEvent): string {
 }
 
 function isPreset(v: string | null): v is SpreadPresetId {
-  return v === "conservador" || v === "balanceado" || v === "agresivo";
+  return v === "conservador" || v === "balanceado" || v === "agresivo" || v === "0dte";
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
@@ -185,6 +185,7 @@ export async function GET(req: Request) {
               ticker: sym.ticker, spot, quotes: chain.quotes, preset, ivRank, earnings,
               fallbackIv: currentRv != null ? currentRv / 100 : 0.4,
               ctx, supports: levels.supports, resistances: levels.resistances,
+              now,
             });
             all.push(...cands);
             contexto.set(sym.ticker, {

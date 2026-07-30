@@ -161,7 +161,7 @@ function SpreadRow({ c, view }: { c: AffordableSpread; view: "estudiante" | "pro
           <span>Riesgo máx <b>{money(m.maxLoss)}</b></span>
           <span>Ganancia máx <b>{money(m.maxProfit)}</b></span>
           <span>R/R <b>{pct(m.returnOnRisk)}</b></span>
-          <span>Anualizado <b>{pct(m.annualizedPct)}</b></span>
+          {m.annualizedPct != null && <span>Anualizado <b>{pct(m.annualizedPct)}</b></span>}
           <span>POP <b>{Math.round(m.pop)}%</b></span>
           <span>BE <b>{m.breakevens.map((b) => money2(b)).join(" / ")}</b></span>
           <span>Contratos <b>{a.maxContracts}</b> {a.binding && <small>(topa {a.binding})</small>}</span>

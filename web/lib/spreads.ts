@@ -741,6 +741,8 @@ export interface BuildInput {
   ctx?: DirectionalContext;
   supports?: Level[];
   resistances?: Level[];
+  /** Necesario en 0DTE: el tiempo restante se mide en horas de sesión. */
+  now?: Date;
 }
 
 /** Agrupa por vencimiento y tipo, con los strikes ordenados. */
@@ -783,6 +785,8 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
   const ctx = input.ctx ?? NEUTRAL;
   const supports = input.supports ?? [];
   const resistances = input.resistances ?? [];
+  const esZeroDte = preset.zeroDte === true;
+  const ahora = input.now ?? new Date();
   if (!(spot > 0)) return [];
 
   const ivPorExp = atmIvByExpiry(quotes, spot);
@@ -813,13 +817,17 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
       };
     }
 
-    const metrics = verticalMetrics({ kind, legs, spot, dte, iv });
+    const metrics = verticalMetrics({
+      kind, legs, spot, dte, iv,
+      timeDte: fractionalDte(dte, ahora),
+      annualize: !esZeroDte,
+    });
     if (!metrics) return null;
 
     return {
       ticker, kind, label: SPREAD_LABEL[kind], thesis: SPREAD_THESIS[kind],
       expiration: ancla.expiration, dte, spot, legs, metrics,
-      score: scoreSpread({ kind, metrics, legs, ivRank, earnings, spot, ctx, supports, resistances }),
+      score: scoreSpread({ kind, metrics, legs, ivRank, earnings, spot, ctx, supports, resistances, zeroDte: esZeroDte }),
       blocked: false, blockReason: null,
       strikesLabel: strikesLabel(legs),
     };
@@ -884,13 +892,15 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
       const legs = [...mejorPut.legs, ...mejorCall.legs];
       const metrics = condorMetrics({
         putLegs: mejorPut.legs, callLegs: mejorCall.legs, spot, dte, iv,
+        timeDte: fractionalDte(dte, ahora),
+        annualize: !esZeroDte,
       });
       if (metrics) {
         out.push({
           ticker, kind: "iron_condor",
           label: SPREAD_LABEL.iron_condor, thesis: SPREAD_THESIS.iron_condor,
           expiration: exp, dte, spot, legs, metrics,
-          score: scoreSpread({ kind: "iron_condor", metrics, legs, ivRank, earnings, spot, ctx, supports, resistances }),
+          score: scoreSpread({ kind: "iron_condor", metrics, legs, ivRank, earnings, spot, ctx, supports, resistances, zeroDte: esZeroDte }),
           blocked: false, blockReason: null,
           strikesLabel: strikesLabel(legs),
         });

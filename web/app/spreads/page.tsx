@@ -34,7 +34,7 @@ export default function SpreadsPage() {
     const v = window.localStorage.getItem(KEY_VIEW);
     if (v === "pro" || v === "estudiante") setView(v);
     const p = window.localStorage.getItem(KEY_PRESET);
-    if (p === "conservador" || p === "balanceado" || p === "agresivo") setPreset(p);
+    if (p === "conservador" || p === "balanceado" || p === "agresivo" || p === "0dte") setPreset(p);
   }, []);
 
   const scan = useCallback((which: SpreadPresetId) => {

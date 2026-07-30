@@ -27,6 +27,7 @@ function quote(over: Partial<SpreadQuote> & Pick<SpreadQuote, "type" | "strike">
     bid: 1,
     ask: 1.1,
     openInterest: 1000,
+    volume: 1000,
     delta: 0.2,
     iv: 0.35,
     ...over,
@@ -34,7 +35,7 @@ function quote(over: Partial<SpreadQuote> & Pick<SpreadQuote, "type" | "strike">
 }
 
 function leg(action: Leg["action"], type: Leg["type"], strike: number, price: number): Leg {
-  return { action, type, strike, price, delta: -0.2, openInterest: 1000, spreadPct: 5 };
+  return { action, type, strike, price, delta: -0.2, openInterest: 1000, volume: 1000, spreadPct: 5 };
 }
 
 describe("presets", () => {

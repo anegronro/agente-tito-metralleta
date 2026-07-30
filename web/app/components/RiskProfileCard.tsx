@@ -201,7 +201,7 @@ export default function RiskProfileCard({
             className="risk-slider"
             type="range"
             min={1}
-            max={10}
+            max={20}
             step={0.5}
             value={profile.tolerancePct}
             onChange={(e) => commitTolerance(Number(e.target.value))}
@@ -209,7 +209,7 @@ export default function RiskProfileCard({
           />
           <span className="risk-scale">
             <span>conservador 1%</span>
-            <span>agresivo 10%</span>
+            <span>agresivo 20%</span>
           </span>
         </label>
       </div>
