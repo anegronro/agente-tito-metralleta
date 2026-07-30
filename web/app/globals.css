@@ -1229,3 +1229,22 @@ tfoot .totals td {
   background: #fffaeb; border: 1px solid #fedf89; color: #b54708;
   font-size: 13px; line-height: 1.5;
 }
+
+/* ── Aviso de fuente caída ───────────────────────────── */
+.health-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 16px; background: #fffaeb; border-bottom: 1px solid #fedf89;
+  color: #93370d; font-size: 13px; line-height: 1.5;
+}
+.health-banner-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.health-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.health-row b { white-space: nowrap; }
+.health-fix { flex-basis: 100%; font-size: 12px; opacity: 0.85; }
+.health-close {
+  flex: none; background: none; border: 0; cursor: pointer;
+  color: inherit; font-size: 15px; line-height: 1; padding: 4px 6px;
+}
+@media (max-width: 640px) {
+  .health-banner { font-size: 12px; padding: 10px 12px; }
+  .health-close { min-height: 44px; min-width: 44px; }
+}

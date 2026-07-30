@@ -2,6 +2,7 @@
 // Auth por cookie de sesión (MARKETSNACK_COOKIE en .env.local). Ver SCOREDCARD/Scoredcard.md.
 
 import type { RawTrade } from "./flow";
+import { loadSession, parseSetCookie, saveSession, withLiveSession } from "./msSession";
 
 const BASE_URL = "https://app.marketsnack.com";
 
@@ -68,7 +69,10 @@ async function paginate(
   const clean = symbol;
   const period = opts.period ?? "5d";
   const maxPages = opts.maxPages ?? 10;
-  const cookieHeader = cookie();
+  // La sesión VIVA manda sobre la de .env.local: MarketSnack emite una cookie
+  // nueva en cada respuesta y reenviar siempre la fija hacía que el reloj de
+  // caducidad no se reiniciara nunca. Ver msSession.ts.
+  let cookieHeader = withLiveSession(cookie(), await loadSession());
 
   const trades: RawTrade[] = [];
   let token: string | null = null;
@@ -95,6 +99,14 @@ async function paginate(
       cache: "no-store",
       redirect: "manual",
     });
+
+    // Rails rota la sesión en CADA respuesta: se guarda y se usa ya en la
+    // página siguiente de este mismo escaneo.
+    const rotada = parseSetCookie(res.headers.get("set-cookie"));
+    if (rotada) {
+      await saveSession(rotada);
+      cookieHeader = withLiveSession(cookieHeader, rotada);
+    }
 
     // Sesión inválida/expirada → MarketSnack redirige a /login o responde 401.
     if (res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400)) {
