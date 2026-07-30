@@ -15,7 +15,14 @@
 import { probAbove, probInBand } from "./expectedMove";
 import { liquidityBlock, spreadPctOf, type WheelBlockReason } from "./wheel";
 import { checkLevel, checkPath, NEUTRAL, type DirectionalContext } from "./directional";
+import { fractionalDte, zeroDteLiquidityBlock, type ZeroDteBlock } from "./zeroDte";
 import type { Level } from "./levels";
+
+/**
+ * Motivos de bloqueo. Une los de la Wheel con el propio del 0DTE
+ * (`volumen_bajo`): son puertas distintas porque miden liquidez distinta.
+ */
+export type SpreadBlockReason = WheelBlockReason | ZeroDteBlock;
 
 const MULTIPLIER = 100;
 
@@ -81,6 +88,8 @@ export interface Leg {
   price: number;
   delta: number | null;
   openInterest: number;
+  /** Volumen del día. En 0DTE sustituye al OI como medida de liquidez. */
+  volume: number;
   spreadPct: number | null;
 }
 
@@ -179,7 +188,7 @@ export function toLeg(q: SpreadQuote, action: LegAction): Leg | null {
   if (price == null) return null;
   return {
     action, type: q.type, strike: q.strike, price,
-    delta: q.delta, openInterest: q.openInterest,
+    delta: q.delta, openInterest: q.openInterest, volume: q.volume,
     spreadPct: spreadPctOf(q.bid, q.ask),
   };
 }
@@ -198,9 +207,13 @@ export function netPrice(legs: Leg[]): number {
  * lado más flojo — si no puedes salir de una pata, tienes la posición coja y el
  * riesgo deja de estar acotado, que era justo el motivo de montarla.
  */
-export function legBlock(quotes: SpreadQuote[]): WheelBlockReason | null {
+export function legBlock(quotes: SpreadQuote[], zeroDte = false): SpreadBlockReason | null {
   for (const q of quotes) {
-    const reason = liquidityBlock({ bid: q.bid, ask: q.ask, openInterest: q.openInterest });
+    // En 0DTE el open interest es de ANOCHE: mide posiciones que a media
+    // sesión pueden estar ya cerradas. Manda el volumen de hoy.
+    const reason = zeroDte
+      ? zeroDteLiquidityBlock({ bid: q.bid, ask: q.ask, volume: q.volume })
+      : liquidityBlock({ bid: q.bid, ask: q.ask, openInterest: q.openInterest });
     if (reason) return reason;
   }
   return null;
@@ -248,8 +261,18 @@ export function verticalMetrics(input: {
   dte: number;
   /** IV ATM del vencimiento — ver la nota de `atmIvByExpiry`. */
   iv: number;
+  /**
+   * Tiempo al vencimiento EN DÍAS para las probabilidades, admitiendo
+   * fracciones. En 0DTE `dte` vale 0 y √T se iría a cero, devolviendo un 100%
+   * o un 0% de probabilidad; `fractionalDte` lo mide en horas de sesión.
+   */
+  timeDte?: number;
+  /** false en 0DTE: anualizar seis horas no informa. */
+  annualize?: boolean;
 }): SpreadMetrics | null {
   const { kind, legs, spot, dte, iv } = input;
+  const timeDte = input.timeDte ?? dte;
+  const annualize = input.annualize ?? true;
   if (legs.length !== 2) return null;
 
   const strikes = legs.map((l) => l.strike);
@@ -282,7 +305,7 @@ export function verticalMetrics(input: {
     ? kind === "put_credit" ? ancla.strike - net : ancla.strike + net
     : kind === "call_debit" ? ancla.strike - net : ancla.strike + net;
 
-  const pAbove = probAbove(spot, be, iv, dte);
+  const pAbove = probAbove(spot, be, iv, timeDte);
   const pop = (alcista ? pAbove : 1 - pAbove) * 100;
 
   const returnOnRisk = (maxProfit / maxLoss) * 100;
@@ -291,7 +314,7 @@ export function verticalMetrics(input: {
     net, credit, debit, width, maxProfit, maxLoss,
     breakevens: [be],
     returnOnRisk,
-    annualizedPct: returnOnRisk * (365 / Math.max(dte, 1)),
+    annualizedPct: annualize ? returnOnRisk * (365 / Math.max(dte, 1)) : null,
     pop,
   };
 }
@@ -311,8 +334,12 @@ export function condorMetrics(input: {
   spot: number;
   dte: number;
   iv: number;
+  timeDte?: number;
+  annualize?: boolean;
 }): SpreadMetrics | null {
   const { putLegs, callLegs, spot, dte, iv } = input;
+  const timeDte = input.timeDte ?? dte;
+  const annualize = input.annualize ?? true;
   if (putLegs.length !== 2 || callLegs.length !== 2) return null;
 
   const anchoPut = Math.abs(putLegs[0].strike - putLegs[1].strike);
@@ -338,8 +365,8 @@ export function condorMetrics(input: {
     net, credit: maxProfit, debit: 0, width, maxProfit, maxLoss,
     breakevens: [beLow, beHigh],
     returnOnRisk,
-    annualizedPct: returnOnRisk * (365 / Math.max(dte, 1)),
-    pop: probInBand(spot, beLow, beHigh, iv, dte) * 100,
+    annualizedPct: annualize ? returnOnRisk * (365 / Math.max(dte, 1)) : null,
+    pop: probInBand(spot, beLow, beHigh, iv, timeDte) * 100,
   };
 }
 
@@ -424,8 +451,11 @@ function popPart(pop: number): ScorePart {
 }
 
 /** Liquidez de la PEOR pata: el spread vale lo que vale su lado más flojo. */
-function liquidityPart(legs: Leg[]): ScorePart {
-  const peorOi = Math.min(...legs.map((l) => l.openInterest));
+function liquidityPart(legs: Leg[], zeroDte = false): ScorePart {
+  // Misma escala, distinta vara: en 0DTE el OI habla de ayer (ver zeroDte.ts).
+  const peorOi = zeroDte
+    ? Math.min(...legs.map((l) => l.volume))
+    : Math.min(...legs.map((l) => l.openInterest));
   const peorSpread = Math.max(...legs.map((l) => l.spreadPct ?? Infinity));
 
   if (peorOi >= 500 && peorSpread <= 10)
@@ -619,11 +649,12 @@ export function scoreSpread(input: {
   ctx?: DirectionalContext;
   supports?: Level[];
   resistances?: Level[];
+  zeroDte?: boolean;
 }): SpreadScore {
   const family = familyOf(input.kind);
   const reward = rescale(rewardPart(input.metrics.returnOnRisk, family), WEIGHTS.reward);
   const pop = rescale(popPart(input.metrics.pop), WEIGHTS.pop);
-  const liquidity = rescale(liquidityPart(input.legs), WEIGHTS.liquidity);
+  const liquidity = rescale(liquidityPart(input.legs, input.zeroDte), WEIGHTS.liquidity);
   const ivFit = rescale(ivFitPart(input.ivRank, family), WEIGHTS.ivFit);
   const earnings = rescale(earningsPart(input.earnings, family), WEIGHTS.earnings);
   const alignment = alignmentPart({
@@ -656,7 +687,7 @@ export interface SpreadCandidate {
   metrics: SpreadMetrics | null;
   score: SpreadScore | null;
   blocked: boolean;
-  blockReason: WheelBlockReason | null;
+  blockReason: SpreadBlockReason | null;
   /** Para la UI: "185/180" o "180/185 · 210/215". */
   strikesLabel: string;
 }
@@ -772,7 +803,7 @@ export function buildSpreads(input: BuildInput): SpreadCandidate[] {
     if (!legAncla || !legPareja) return null;
 
     const legs = [legAncla, legPareja];
-    const bloqueo = legBlock([ancla, pareja]);
+    const bloqueo = legBlock([ancla, pareja], esZeroDte);
     if (bloqueo) {
       return {
         ticker, kind, label: SPREAD_LABEL[kind], thesis: SPREAD_THESIS[kind],
