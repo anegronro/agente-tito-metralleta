@@ -63,6 +63,8 @@ export interface SpreadQuote {
   bid: number | null;
   ask: number | null;
   openInterest: number;
+  /** Volumen del día. Es la liquidez que cuenta en un 0DTE — ver zeroDte.ts. */
+  volume: number;
   /** Delta del proveedor. null si no vino. */
   delta: number | null;
   /** IV decimal del proveedor. null si no vino. */
@@ -84,7 +86,7 @@ export interface Leg {
 
 // ── Presets ────────────────────────────────────────────────────────────
 
-export type SpreadPresetId = "conservador" | "balanceado" | "agresivo";
+export type SpreadPresetId = "conservador" | "balanceado" | "agresivo" | "0dte";
 
 export interface SpreadPreset {
   id: SpreadPresetId;
@@ -101,6 +103,13 @@ export interface SpreadPreset {
   maxWidth: number;
   takeProfitPct: number;
   explain: string;
+  /**
+   * Vence hoy. Cambia el reloj (horas en vez de días), la medida de liquidez
+   * (volumen en vez de open interest) y apaga el anualizado. Ver zeroDte.ts.
+   */
+  zeroDte?: boolean;
+  /** Aviso que la UI enseña siempre que el preset está activo. */
+  warning?: string;
 }
 
 export const SPREAD_PRESETS: Record<SpreadPresetId, SpreadPreset> = {
@@ -129,6 +138,31 @@ export const SPREAD_PRESETS: Record<SpreadPresetId, SpreadPreset> = {
     longDeltaMin: 0.30, longDeltaMax: 0.45,
     dteMin: 7, dteMax: 30, maxWidth: 15, takeProfitPct: 50,
     explain: "Cerca del dinero y a poco plazo: cobras mucho más y pierdes bastante más a menudo.",
+  },
+
+  /**
+   * 0DTE — vence hoy.
+   *
+   * Va fuera de la escala de los otros tres: no es "más agresivo que agresivo",
+   * es otro instrumento. Los strikes se piden MÁS LEJOS del dinero
+   * (0,05-0,15) que en cualquier otro preset, y no por prudencia decorativa:
+   * en las últimas horas el delta deja de ser una probabilidad estable y un
+   * 0,30 puede acabar dentro del dinero en minutos.
+   *
+   * El ancho se topa en $5 porque el ala es el ÚNICO freno que queda: sin
+   * tiempo para que el precio vuelva, la pérdida máxima deja de ser un
+   * escenario extremo y pasa a ser un desenlace normal.
+   */
+  "0dte": {
+    id: "0dte", label: "0DTE (vence hoy)",
+    shortDeltaMin: 0.05, shortDeltaMax: 0.15,
+    longDeltaMin: 0.30, longDeltaMax: 0.50,
+    dteMin: 0, dteMax: 0, maxWidth: 5, takeProfitPct: 50,
+    zeroDte: true,
+    explain: "Vence hoy. Cobras poco, aciertas casi siempre, y el día que falles pierdes el ancho entero sin tiempo para recuperarlo.",
+    warning:
+      "Un 0DTE no da margen: si el precio se te va, no hay mañana para que vuelva. " +
+      "Aquí solo se muestran estructuras de riesgo definido, con la pérdida topada al ancho del ala.",
   },
 };
 
@@ -190,8 +224,12 @@ export interface SpreadMetrics {
   breakevens: number[];
   /** maxProfit / maxLoss en %. Lo que ganas por cada $ arriesgado. */
   returnOnRisk: number;
-  /** El mismo retorno llevado a un año, en %. */
-  annualizedPct: number;
+  /**
+   * El mismo retorno llevado a un año, en %. **null en 0DTE**, a propósito:
+   * `365 / dte` con dte 0 multiplicaría por cientos y pondría lo más peligroso
+   * arriba. Anualizar algo que dura seis horas no informa, engaña.
+   */
+  annualizedPct: number | null;
   /** Probabilidad de acabar en beneficio, 0-100. */
   pop: number;
 }
