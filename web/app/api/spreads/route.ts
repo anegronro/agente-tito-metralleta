@@ -33,6 +33,7 @@ import {
   SPREAD_PRESETS, buildSpreads, scoreSpread,
   type SpreadPresetId, type SpreadCandidate, type EarningsFlag,
 } from "@/lib/spreads";
+import { zeroDteWindow } from "@/lib/zeroDte";
 import { WHEEL_UNIVERSE } from "@/lib/wheelUniverse";
 import type { Level } from "@/lib/levels";
 import type { Row } from "@/lib/types";
@@ -127,6 +128,20 @@ export async function GET(req: Request) {
       }>();
 
       try {
+        // PORTERO DEL 0DTE. Fuera de la sesión esto no devuelve "menos
+        // resultados", devuelve resultados FALSOS: probado con el mercado
+        // cerrado, colaba un SPY 744/745 con 0,3% de probabilidad —un contrato
+        // que ya había expirado sin valor— presentado como operable. Un
+        // screener que enseña eso es peor que uno que no enseña nada.
+        if (preset.zeroDte) {
+          const ventana = zeroDteWindow(now);
+          if (!ventana.open) {
+            send({ type: "error", message: `${ventana.why} Los 0DTE solo se pueden mirar con el mercado abierto.` });
+            return;
+          }
+          send({ type: "step", label: `0DTE · ${ventana.why}` });
+        }
+
         send({ type: "step", label: "Leyendo el flujo de todo el mercado…" });
         const flowPct = await marketFlowBias(now);
         send({
