@@ -49,6 +49,24 @@ describe("presets", () => {
     expect(SPREAD_PRESETS.balanceado.maxWidth).toBeLessThan(SPREAD_PRESETS.agresivo.maxWidth);
   });
 
+  it("el 0DTE queda FUERA de la escala: es otro instrumento, no 'más agresivo'", () => {
+    const z = SPREAD_PRESETS["0dte"];
+    expect(z.zeroDte).toBe(true);
+    expect(z.dteMin).toBe(0);
+    expect(z.dteMax).toBe(0);
+    // Vende MÁS LEJOS del dinero que el conservador: en las últimas horas el
+    // delta deja de ser una probabilidad estable.
+    expect(z.shortDeltaMax).toBeLessThan(SPREAD_PRESETS.conservador.shortDeltaMax);
+    // Y trae aviso obligatorio.
+    expect(z.warning).toBeTruthy();
+  });
+
+  it("solo el 0DTE apaga el anualizado", () => {
+    for (const p of Object.values(SPREAD_PRESETS)) {
+      if (p.id !== "0dte") expect(p.zeroDte).toBeUndefined();
+    }
+  });
+
   it("la pata COMPRADA va al revés: baja de delta al subir la agresividad", () => {
     expect(SPREAD_PRESETS.agresivo.longDeltaMax).toBeLessThanOrEqual(SPREAD_PRESETS.balanceado.longDeltaMin);
     expect(SPREAD_PRESETS.balanceado.longDeltaMax).toBeLessThanOrEqual(SPREAD_PRESETS.conservador.longDeltaMin);

@@ -164,7 +164,7 @@ export const SPREAD_PRESETS: Record<SpreadPresetId, SpreadPreset> = {
    */
   "0dte": {
     id: "0dte", label: "0DTE (vence hoy)",
-    shortDeltaMin: 0.05, shortDeltaMax: 0.15,
+    shortDeltaMin: 0.04, shortDeltaMax: 0.12,
     longDeltaMin: 0.30, longDeltaMax: 0.50,
     dteMin: 0, dteMax: 0, maxWidth: 5, takeProfitPct: 50,
     zeroDte: true,
