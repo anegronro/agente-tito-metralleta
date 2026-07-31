@@ -61,6 +61,28 @@ function HistoryCell({ i }: { i: Idea }) {
   );
 }
 
+/**
+ * Segunda opinión de MarketSnack sobre la misma operación.
+ *
+ * Solo aparece cuando de verdad la hay: su score llega **sin calcular** en
+ * buena parte del feed (y precisamente en las operaciones más grandes), así que
+ * un chip permanente mentiría sobre cuántas veces hay confirmación.
+ */
+function ConsensusChip({ i }: { i: Idea }) {
+  const c = i.consensus;
+  if (!c || c.ms == null) return null;
+  if (c.agreement === "solo_nuestro") {
+    // 0DTE: se enseña el dato pero no puntúa (ver lib/consensus.ts).
+    return <span className="chip chip-neutral" title={c.why}>MS {Math.round(c.ms * 10)}</span>;
+  }
+  const confirma = c.agreement === "confirma";
+  return (
+    <span className={`chip ${confirma ? "chip-prima" : "chip-neutral"}`} title={c.why}>
+      {confirma ? "✓" : "≠"} MarketSnack {Math.round(c.ms * 10)}
+    </span>
+  );
+}
+
 function BindingChip({ s }: { s: Sizing }) {
   if (s.blocked) return <span className="chip chip-blocked">bloqueado</span>;
   if (s.maxContracts === 0) return <span className="chip chip-neutral">no alcanza</span>;
@@ -82,6 +104,7 @@ function IdeaCard({
         <span className="idea-contract">{contractLabel(i)}</span>
         <span className="muted">{expiryLabel(i)}</span>
         {i.repeated && <span className="chip chip-neutral">🔁 repetido</span>}
+        <ConsensusChip i={i} />
         <button
           className={`star ${starred ? "on" : ""}`}
           onClick={onStar}

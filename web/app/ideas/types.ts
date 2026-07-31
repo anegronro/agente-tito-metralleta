@@ -1,3 +1,4 @@
+import type { Consensus } from "@/lib/consensus";
 // Tipos compartidos entre la ruta /api/ideas y la página /ideas.
 
 export interface IdeaHistory {
@@ -29,6 +30,8 @@ export interface Idea {
   openInterest: number;
   timestamp: string;
   unusualScore: number;
+  /** Cruce con el score propio de MarketSnack. Ver lib/consensus.ts. */
+  consensus: Consensus;
   repeated: boolean;
   history: IdeaHistory | null;
 }

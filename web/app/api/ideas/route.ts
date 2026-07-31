@@ -10,6 +10,7 @@
 import { classifyFlow, type FlowRow } from "@/lib/flow";
 import { fetchMarketFlow, MarketSnackError } from "@/lib/marketsnack";
 import { isTradeableIdea, passesQualityFilter } from "@/lib/risk";
+import { consensus } from "@/lib/consensus";
 import { loadTrades, saveTrades } from "@/lib/store";
 import { fetchDaily } from "@/lib/marketData";
 import { validationScore, type FlowLite } from "@/lib/validation";
@@ -146,6 +147,11 @@ export async function GET() {
           openInterest: r.openInterest,
           timestamp: r.timestamp,
           unusualScore: r.scores?.total ?? 0,
+          consensus: consensus({
+            mine: r.scores?.total ?? 0,
+            msRaw: r.score,
+            zeroDte: r.dte === 0,
+          }),
           repeated: Boolean(r.flags?.repeated),
           history: history.get(r.underlying) ?? null,
         }));
