@@ -7,7 +7,7 @@
 // El sizing NO se calcula aquí: el tamaño de cuenta vive en localStorage del navegador
 // y nunca llega al servidor. Esta ruta devuelve los griegos; el cliente aplica sizeFlow.
 
-import { classifyFlow, type FlowRow } from "@/lib/flow";
+import { classifyFlow, unusualTradeScore, type FlowRow } from "@/lib/flow";
 import { fetchMarketFlow, MarketSnackError } from "@/lib/marketsnack";
 import { isTradeableIdea, passesQualityFilter } from "@/lib/risk";
 import { consensus } from "@/lib/consensus";
@@ -147,8 +147,14 @@ export async function GET() {
           openInterest: r.openInterest,
           timestamp: r.timestamp,
           unusualScore: r.scores?.total ?? 0,
+          // OJO, hay DOS scores y no son la misma escala:
+          //   · `r.scores.total`         = volumen+timing+repetición → 0-30
+          //   · `unusualTradeScore().total` = promedio de 6 sub-scores → 0-10
+          // El consenso usa el SEGUNDO, que es el que `isTradeableIdea` aplica
+          // con `UNUSUAL_TRADE_THRESHOLD`. Con el primero el `combined` se
+          // topaba en 10 y aplastaba el valor de todas las ideas buenas.
           consensus: consensus({
-            mine: r.scores?.total ?? 0,
+            mine: unusualTradeScore(r).total,
             msRaw: r.score,
             zeroDte: r.dte === 0,
           }),
