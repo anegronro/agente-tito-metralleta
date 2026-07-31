@@ -21,12 +21,13 @@ import { cachedDailyBars } from "@/lib/barsStore";
 import { findLevels, type LvlBar } from "@/lib/levels";
 import { realizedVolSeries, rankWithin } from "@/lib/ivcontext";
 import { earningsForTicker } from "@/lib/earnings";
-import { fetchMarketFlow } from "@/lib/marketsnack";
+import { fetchMarketFlow, fetchPresetFlow } from "@/lib/marketsnack";
 import { classifyFlow } from "@/lib/flow";
 import { fetchTickerNews, newsBias } from "@/lib/news";
 import { gexAnalysis } from "@/lib/gex";
 import {
-  callPremiumPctByTicker, combineBias, flowVote, gexVote, newsVote,
+  aggressiveBullishPctByTicker, callPremiumPctByTicker, combineBias,
+  flowVote, gexVote, newsVote, zeroDteFlowVote,
   type DirectionalContext,
 } from "@/lib/directional";
 import {
@@ -45,6 +46,14 @@ export const dynamic = "force-dynamic";
 // Más bajo que el 6 de la Wheel: aquí cada ticker pide la cadena ENTERA
 // (calls y puts), así que las respuestas son del orden del doble de grandes.
 const CONCURRENCY = 4;
+
+/**
+ * Preset de MarketSnack que aísla el dinero grande operando 0DTE hoy.
+ * Verificado contra su API (jul 2026): 100% de las filas con DTE 0, premium
+ * mínimo ~$101K y lotes de mediana 302 contratos. Son umbrales suyos sobre
+ * campos crudos — NO hay GEX detrás, su feed no expone nada agregado.
+ */
+const MS_ZERO_DTE_PRESET = "0dte-momentum-spike";
 
 /** Tope de tickers a los que se les piden noticias. Ver la nota de arriba. */
 const NEWS_BUDGET = 10;
@@ -86,6 +95,24 @@ async function marketFlowBias(now: Date): Promise<Map<string, number>> {
     const { trades } = await fetchMarketFlow({ period: "1d", maxPages: 8, minPremium: 250_000 });
     const { rows } = classifyFlow(trades, now);
     return callPremiumPctByTicker(rows);
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Sesgo del flujo cuando el preset es 0DTE.
+ *
+ * Cambian las DOS cosas respecto al escaneo normal: la fuente (el preset de
+ * MarketSnack que solo trae vencimientos de hoy) y la cuenta — aquí sí se mira
+ * el lado de la ejecución, porque en un feed de apuestas agresivas vender una
+ * call es lo contrario de comprarla. Ver `aggressiveBullishPctByTicker`.
+ */
+async function zeroDteFlowBias(now: Date): Promise<Map<string, number>> {
+  try {
+    const { trades } = await fetchPresetFlow(MS_ZERO_DTE_PRESET, { period: "1d", maxPages: 5 });
+    const { rows } = classifyFlow(trades, now);
+    return aggressiveBullishPctByTicker(rows);
   } catch {
     return new Map();
   }
@@ -142,8 +169,14 @@ export async function GET(req: Request) {
           send({ type: "step", label: `0DTE · ${ventana.why}` });
         }
 
-        send({ type: "step", label: "Leyendo el flujo de todo el mercado…" });
-        const flowPct = await marketFlowBias(now);
+        const esZeroDte = preset.zeroDte === true;
+        send({
+          type: "step",
+          label: esZeroDte
+            ? "Leyendo el dinero grande que opera 0DTE hoy…"
+            : "Leyendo el flujo de todo el mercado…",
+        });
+        const flowPct = esZeroDte ? await zeroDteFlowBias(now) : await marketFlowBias(now);
         send({
           type: "step",
           label: flowPct.size > 0
@@ -183,7 +216,10 @@ export async function GET(req: Request) {
             const callPct = flowPct.get(sym.ticker) ?? null;
 
             const ctx = combineBias(
-              [gexVote(gex.kingStrike, spot), flowVote(callPct)],
+              [
+                gexVote(gex.kingStrike, spot),
+                esZeroDte ? zeroDteFlowVote(callPct) : flowVote(callPct),
+              ],
               gex.kingStrike,
             );
 
@@ -236,7 +272,11 @@ export async function GET(req: Request) {
               const items = await fetchTickerNews(ticker, 12);
               const nb = newsBias(items, now);
               const nuevo = combineBias(
-                [gexVote(c.ctx.magnet, c.spot), flowVote(c.callPct), newsVote(nb)],
+                [
+                  gexVote(c.ctx.magnet, c.spot),
+                  preset.zeroDte ? zeroDteFlowVote(c.callPct) : flowVote(c.callPct),
+                  newsVote(nb),
+                ],
                 c.ctx.magnet,
               );
               for (const cand of all) {

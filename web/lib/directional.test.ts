@@ -3,6 +3,7 @@ import {
   NEUTRAL,
   SOURCE_WEIGHT,
   STRONG_LEVEL,
+  aggressiveBullishPctByTicker,
   callPremiumPctByTicker,
   checkLevel,
   checkPath,
@@ -10,6 +11,7 @@ import {
   flowVote,
   gexVote,
   newsVote,
+  zeroDteFlowVote,
 } from "./directional";
 import type { Level } from "./levels";
 import type { NewsBias } from "./news";
@@ -155,6 +157,67 @@ describe("callPremiumPctByTicker", () => {
     const m = callPremiumPctByTicker(rows, 1000);
     expect(m.get("AAA")).toBe(100);
     expect(m.get("BBB")).toBe(0);
+  });
+});
+
+describe("aggressiveBullishPctByTicker — EL LADO CAMBIA EL SIGNO", () => {
+  const t = (type: "call" | "put", aggression: "ask" | "bid" | "mid", premium = 200_000) =>
+    ({ underlying: "AAA", type, premium, aggression } as const);
+
+  it("comprar calls es alcista y venderlas es bajista", () => {
+    // Es la diferencia con `callPremiumPctByTicker`, que contaría las dos
+    // como alcistas por ser calls.
+    expect(aggressiveBullishPctByTicker([t("call", "ask")], 1000).get("AAA")).toBe(100);
+    expect(aggressiveBullishPctByTicker([t("call", "bid")], 1000).get("AAA")).toBe(0);
+  });
+
+  it("los puts son el espejo: comprarlos es bajista y venderlos alcista", () => {
+    expect(aggressiveBullishPctByTicker([t("put", "ask")], 1000).get("AAA")).toBe(0);
+    expect(aggressiveBullishPctByTicker([t("put", "bid")], 1000).get("AAA")).toBe(100);
+  });
+
+  it("difiere de verdad del conteo por tipo", () => {
+    // Todo son calls, así que `callPremiumPctByTicker` diría 100% alcista;
+    // pero están VENDIDAS, o sea resistencia.
+    const filas = [t("call", "bid"), t("call", "bid")];
+    expect(callPremiumPctByTicker(filas, 1000).get("AAA")).toBe(100);
+    expect(aggressiveBullishPctByTicker(filas, 1000).get("AAA")).toBe(0);
+  });
+
+  it("las ejecuciones al medio NO votan: no se sabe quién fue el agresor", () => {
+    const m = aggressiveBullishPctByTicker([t("call", "mid"), t("put", "mid")], 1000);
+    expect(m.has("AAA")).toBe(false);
+  });
+
+  it("pondera por dinero, no por número de operaciones", () => {
+    const filas = [
+      t("call", "bid", 10_000), t("call", "bid", 10_000), t("call", "bid", 10_000),
+      t("call", "ask", 900_000),
+    ];
+    expect(aggressiveBullishPctByTicker(filas, 1000).get("AAA")!).toBeGreaterThan(95);
+  });
+
+  it("descarta tickers con poco dinero direccional", () => {
+    expect(aggressiveBullishPctByTicker([t("call", "ask", 100)], 100_000).has("AAA")).toBe(false);
+  });
+});
+
+describe("zeroDteFlowVote", () => {
+  it("50% es empate y 70/30 son votos plenos", () => {
+    expect(zeroDteFlowVote(50)!.value).toBe(0);
+    expect(zeroDteFlowVote(70)!.value).toBeCloseTo(1, 6);
+    expect(zeroDteFlowVote(30)!.value).toBeCloseTo(-1, 6);
+  });
+
+  it("pesa lo mismo que el flujo normal pero se explica distinto", () => {
+    expect(zeroDteFlowVote(80)!.weight).toBe(flowVote(80)!.weight);
+    expect(zeroDteFlowVote(80)!.why).not.toBe(flowVote(80)!.why);
+    expect(zeroDteFlowVote(80)!.why).toMatch(/0DTE/);
+  });
+
+  it("sin dato no vota", () => {
+    expect(zeroDteFlowVote(null)).toBeNull();
+    expect(zeroDteFlowVote(NaN)).toBeNull();
   });
 });
 

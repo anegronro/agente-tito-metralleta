@@ -160,6 +160,68 @@ export function callPremiumPctByTicker(
   return out;
 }
 
+// ── Flujo 0DTE: aquí el LADO de la ejecución cambia el signo ───────────
+
+/** Como `FlowLite`, más cómo se ejecutó la operación. */
+export interface FlowAggr extends FlowLite {
+  aggression: "ask" | "bid" | "mid" | "unknown";
+}
+
+/**
+ * Sesgo alcista 0-100 del flujo AGRESIVO, ponderado por dinero.
+ *
+ * POR QUÉ NO VALE `callPremiumPctByTicker` AQUÍ: esa cuenta todo el premium de
+ * calls como alcista, y en un feed de apuestas agresivas eso es sencillamente
+ * falso. Vender una call no es apostar a que suba, es marcar resistencia. Se
+ * aplica la tabla del Proceso Principal:
+ *
+ *   comprar call (al ask) → alcista      vender call (al bid) → bajista
+ *   comprar put  (al ask) → bajista      vender put  (al bid) → alcista
+ *
+ * Las ejecuciones al medio o sin lado reconocible **no votan**: no se sabe
+ * quién fue el agresor, y adivinarlo inventaría dirección donde no la hay.
+ */
+export function aggressiveBullishPctByTicker(
+  rows: FlowAggr[],
+  minPremium = 100_000,
+): Map<string, number> {
+  const acc = new Map<string, { alcista: number; bajista: number }>();
+  for (const r of rows) {
+    if (r.type === "unknown" || !(r.premium > 0) || !r.underlying) continue;
+    if (r.aggression !== "ask" && r.aggression !== "bid") continue;
+
+    const comprado = r.aggression === "ask";
+    const alcista = r.type === "call" ? comprado : !comprado;
+
+    const a = acc.get(r.underlying) ?? { alcista: 0, bajista: 0 };
+    if (alcista) a.alcista += r.premium;
+    else a.bajista += r.premium;
+    acc.set(r.underlying, a);
+  }
+
+  const out = new Map<string, number>();
+  for (const [ticker, a] of acc) {
+    const total = a.alcista + a.bajista;
+    if (total < minPremium) continue;
+    out.set(ticker, (a.alcista / total) * 100);
+  }
+  return out;
+}
+
+/**
+ * Voto del flujo de 0DTE. Misma escala que `flowVote` (50 = empate) pero con
+ * su propio texto: aquí el número ya es direccional, no un simple % de calls.
+ */
+export function zeroDteFlowVote(bullishPct: number | null): BiasVote | null {
+  if (bullishPct == null || !Number.isFinite(bullishPct)) return null;
+  return {
+    source: "flujo",
+    value: clamp((bullishPct - 50) / 20),
+    weight: SOURCE_WEIGHT.flujo,
+    why: `Del dinero grande que hoy opera 0DTE, el ${bullishPct.toFixed(0)}% apuesta al alza.`,
+  };
+}
+
 // ── Colocación del strike frente a los niveles ─────────────────────────
 
 export type LevelFit = "protegido" | "expuesto" | "sin_nivel";

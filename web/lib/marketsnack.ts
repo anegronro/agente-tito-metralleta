@@ -26,6 +26,13 @@ function cookie(): string {
 }
 
 export interface FetchFlowOptions {
+  /**
+   * Preset del propio MarketSnack (`0dte-momentum-spike`, `cheap-lotto-bets`…).
+   * Son umbrales suyos sobre campos crudos —premium, tamaño, DTE, delta—, no
+   * hay nada agregado por strike detrás: comprobado que la respuesta no trae
+   * ningún campo de GEX.
+   */
+  preset?: string;
   period?: string; // "1d" | "5d" | "1m"
   maxPages?: number;
   minPremium?: number; // filtro server-side: solo trades con premium ≥ este valor ($)
@@ -61,6 +68,21 @@ export async function fetchMarketFlow(opts: FetchFlowOptions = {}): Promise<Flow
   return paginate(null, opts);
 }
 
+/**
+ * Flujo de un preset de MarketSnack, de todo el mercado.
+ *
+ * OJO: `filter[scope]` es OBLIGATORIO aunque mandes preset. Sin él la API
+ * responde **422** con `{"error":{"filter":{"scope":["is missing"]}}}` y el
+ * mensaje no menciona el preset, así que parece que el slug está mal cuando
+ * el problema es otro. Me costó una ronda.
+ */
+export async function fetchPresetFlow(
+  preset: string,
+  opts: FetchFlowOptions = {},
+): Promise<FlowResult> {
+  return paginate(null, { ...opts, preset });
+}
+
 /** Cuerpo de paginación compartido. `symbol === null` → escaneo de todo el mercado. */
 async function paginate(
   symbol: string | null,
@@ -86,6 +108,7 @@ async function paginate(
     page += 1;
     const params = new URLSearchParams();
     params.set("filter[scope]", "all");
+    if (opts.preset) params.set("filter[preset]", opts.preset);
     if (clean) params.append("filter[symbol][]", clean);
     params.set("period", period);
     if (opts.minPremium && opts.minPremium > 0) {
