@@ -203,3 +203,51 @@ describe("gexAnalysis — cascada de gamma", () => {
     expect(a.totalNetGex).toBeCloseTo(0, 6);
   });
 });
+
+describe("allowZeroDte — el 0DTE no puede quedar fuera del GEX", () => {
+  /** Cadena que vence HOY, con gamma real (como la de Schwab). */
+  function hoy(now: Date) {
+    const fecha = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(now);
+    return [100, 105, 110].flatMap((strike) =>
+      (["call", "put"] as const).map((contractType) => ({
+        optionTicker: `${contractType}-${strike}`,
+        contractType, expiration: fecha, strike,
+        openInterest: 5000, volume: 5000,
+        price: 1, priceSource: "last_trade" as const,
+        openPremium: 5000, notionalValue: strike * 100 * 5000,
+        gamma: 0.02, iv: 0.4,
+      })),
+    );
+  }
+
+  const now = new Date("2026-08-03T17:00:00Z"); // 13:00 ET, sesión abierta
+  const closes = Array.from({ length: 30 }, (_, i) => 105 + Math.sin(i) * 2);
+
+  it("SIN el flag la cadena de hoy se descarta entera", () => {
+    const a = gexAnalysis({ rows: hoy(now), closes, spot: 105, now });
+    expect(a.n).toBe(0);
+    expect(a.kingStrike).toBeNull();
+  });
+
+  it("CON el flag sí produce nodos e imán", () => {
+    const a = gexAnalysis({ rows: hoy(now), closes, spot: 105, now, allowZeroDte: true });
+    expect(a.n).toBeGreaterThan(0);
+    expect(a.kingStrike).not.toBeNull();
+    expect(a.nodes.length).toBeGreaterThan(0);
+  });
+
+  it("no cambia nada para los vencimientos normales", () => {
+    const futuro = hoy(now).map((r) => ({ ...r, expiration: "2026-09-18" }));
+    const sin = gexAnalysis({ rows: futuro, closes, spot: 105, now });
+    const con = gexAnalysis({ rows: futuro, closes, spot: 105, now, allowZeroDte: true });
+    expect(con.kingStrike).toBe(sin.kingStrike);
+    expect(con.n).toBe(sin.n);
+  });
+
+  it("sigue descartando lo ya vencido", () => {
+    const ayer = hoy(now).map((r) => ({ ...r, expiration: "2026-07-01" }));
+    expect(gexAnalysis({ rows: ayer, closes, spot: 105, now, allowZeroDte: true }).n).toBe(0);
+  });
+});

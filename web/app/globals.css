@@ -1248,3 +1248,20 @@ tfoot .totals td {
   .health-banner { font-size: 12px; padding: 10px 12px; }
   .health-close { min-height: 44px; min-width: 44px; }
 }
+
+/* ── Alertas de SPX ──────────────────────────────────── */
+.spx-head { display: flex; flex-direction: column; gap: 10px; }
+.spx-spot { display: flex; align-items: baseline; gap: 10px; }
+.spx-spot strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.spx-facts { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.spx-facts b { color: var(--text); font-variant-numeric: tabular-nums; }
+.spx-pos { color: #067647; }
+.spx-neg { color: #b42318; }
+.spx-alert { padding: 14px 18px; border-left: 4px solid var(--border); }
+.spx-alert p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.spx-alert-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 15px; }
+.spx-alert.nivel-alta { border-left-color: #b42318; background: #fff7f7; }
+.spx-alert.nivel-media { border-left-color: #b54708; background: #fffaeb; }
+.spx-alert.nivel-info { border-left-color: var(--border); }
+.spx-nodes-title { margin: 0 0 10px; font-size: 15px; }
+.spx-nodes { display: flex; flex-wrap: wrap; gap: 6px; }

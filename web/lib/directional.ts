@@ -46,6 +46,32 @@ export const NEUTRAL: DirectionalContext = {
  */
 export const SOURCE_WEIGHT = { gex: 0.45, flujo: 0.35, noticias: 0.20 } as const;
 
+/**
+ * Pesos en modo 0DTE: **el GEX manda**.
+ *
+ * En un contrato que vence en horas, quien mueve el precio es la cobertura del
+ * dealer alrededor de los strikes con gamma, no una tesis de fondo. Y las
+ * noticias salen del todo: nuestra capa de titulares se cachea por horas y un
+ * titular de esta mañana no dice nada útil sobre las próximas dos. Dejarla con
+ * un peso pequeño solo metería ruido de ayer en una decisión de hoy.
+ */
+export const ZERO_DTE_WEIGHT = { gex: 0.65, flujo: 0.35, noticias: 0 } as const;
+
+/**
+ * Distancia al imán que cuenta como voto PLENO, en % del precio.
+ *
+ * Son dos escalas porque son dos horizontes, y usar la de 30 días en un 0DTE
+ * deja al GEX mudo. Medido en el escaneo real de las 13:48 ET: los once imanes
+ * detectados estaban **entre el 0,0% y el 0,9%** del precio — sobre la escala
+ * de ±3% eso da votos de 0,03 a 0,3 y el sesgo sale neutral siempre, por mucho
+ * peso que se le dé.
+ *
+ * El 0,5% no es arbitrario: la σ diaria de SPY ronda el 1%, y a dos horas del
+ * cierre eso es 1%·√(2/6,5) ≈ 0,55%. O sea, medio punto porcentual ES el
+ * movimiento típico que queda por delante.
+ */
+export const FULL_VOTE_PCT = { normal: 3, zeroDte: 0.5 } as const;
+
 function clamp(v: number, min = -1, max = 1): number {
   return Math.max(min, Math.min(max, v));
 }
@@ -54,15 +80,20 @@ function clamp(v: number, min = -1, max = 1): number {
  * Voto del imán de gamma. Un 3% de distancia ya es un voto pleno: más allá de
  * eso el imán deja de ser un objetivo creíble dentro del plazo del spread.
  */
-export function gexVote(magnet: number | null, spot: number): BiasVote | null {
+export function gexVote(
+  magnet: number | null,
+  spot: number,
+  weight: number = SOURCE_WEIGHT.gex,
+  fullVotePct: number = FULL_VOTE_PCT.normal,
+): BiasVote | null {
   if (magnet == null || !(spot > 0) || !(magnet > 0)) return null;
   const distPct = ((magnet - spot) / spot) * 100;
-  const value = clamp(distPct / 3);
+  const value = clamp(distPct / Math.max(fullVotePct, 0.05));
   const dir = distPct > 0 ? "por encima" : "por debajo";
   return {
     source: "gex",
     value,
-    weight: SOURCE_WEIGHT.gex,
+    weight,
     why: `El imán de gamma está en $${magnet.toFixed(2)}, un ${Math.abs(distPct).toFixed(1)}% ${dir} del precio.`,
   };
 }
@@ -217,7 +248,7 @@ export function zeroDteFlowVote(bullishPct: number | null): BiasVote | null {
   return {
     source: "flujo",
     value: clamp((bullishPct - 50) / 20),
-    weight: SOURCE_WEIGHT.flujo,
+    weight: ZERO_DTE_WEIGHT.flujo,
     why: `Del dinero grande que hoy opera 0DTE, el ${bullishPct.toFixed(0)}% apuesta al alza.`,
   };
 }

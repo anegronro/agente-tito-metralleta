@@ -19,7 +19,9 @@ type SpreadMeta = { scanned: number; failed: number; withCandidates: number; deg
 export default function SpreadsPage() {
   const [profile, setProfile] = useState<RiskProfile>(DEFAULT_PROFILE);
   const [view, setView] = useState<"estudiante" | "pro">("estudiante");
-  const [preset, setPreset] = useState<SpreadPresetId>("balanceado");
+  // 0DTE por defecto: es la prioridad que pidió Angel. Fuera de sesión la ruta
+  // lo dice con su propio mensaje, que es más informativo que esconder el modo.
+  const [preset, setPreset] = useState<SpreadPresetId>("0dte");
   const [filter, setFilter] = useState<KindFilter>(null);
 
   const [candidates, setCandidates] = useState<SpreadCandidate[] | null>(null);

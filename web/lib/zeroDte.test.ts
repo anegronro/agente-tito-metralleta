@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { probAbove } from "./expectedMove";
 import {
   MAX_ZERO_DTE_SPREAD_PCT,
+  ZERO_DTE_TOP_N,
+  topByVolume,
   MIN_ZERO_DTE_VOLUME,
   fractionalDte,
   hoursToClose,
@@ -139,5 +141,60 @@ describe("zeroDteLiquidityBlock — manda el VOLUMEN, no el open interest", () =
     expect(MIN_ZERO_DTE_VOLUME).toBeGreaterThanOrEqual(100);
     expect(zeroDteLiquidityBlock({ bid: 1, ask: 1.05, volume: MIN_ZERO_DTE_VOLUME })).toBeNull();
     expect(zeroDteLiquidityBlock({ bid: 1, ask: 1.05, volume: MIN_ZERO_DTE_VOLUME - 1 })).toBe("volumen_bajo");
+  });
+});
+
+describe("topByVolume — la cadena que alimenta el GEX del 0DTE", () => {
+  const q = (type: "put" | "call", strike: number, volume: number) => ({ type, strike, volume });
+
+  /** 30 calls y 30 puts con volumen decreciente según el strike. */
+  const cadena = [
+    ...Array.from({ length: 30 }, (_, i) => q("call", 100 + i, 3000 - i * 100)),
+    ...Array.from({ length: 30 }, (_, i) => q("put", 100 - i, 2500 - i * 80)),
+  ];
+
+  it("devuelve n de cada lado, no n en total", () => {
+    const out = topByVolume(cadena, 10);
+    expect(out.filter((x) => x.type === "call")).toHaveLength(10);
+    expect(out.filter((x) => x.type === "put")).toHaveLength(10);
+    expect(out).toHaveLength(20);
+  });
+
+  it("son los MÁS negociados de cada lado", () => {
+    const out = topByVolume(cadena, 10);
+    const calls = out.filter((x) => x.type === "call").map((x) => x.volume);
+    const puts = out.filter((x) => x.type === "put").map((x) => x.volume);
+    expect(Math.min(...calls)).toBeGreaterThanOrEqual(
+      Math.max(...cadena.filter((x) => x.type === "call" && !calls.includes(x.volume)).map((x) => x.volume)),
+    );
+    expect(Math.min(...puts)).toBeGreaterThan(0);
+  });
+
+  it("descarta los contratos que hoy no han operado", () => {
+    // Un strike con volumen 0 no dice nada de la gamma de HOY.
+    const conCeros = [...cadena, q("call", 999, 0), q("put", 1, 0)];
+    const out = topByVolume(conCeros, 50);
+    expect(out.some((x) => x.volume === 0)).toBe(false);
+  });
+
+  it("no se rompe con menos contratos de los pedidos", () => {
+    const corta = [q("call", 100, 500), q("put", 90, 400)];
+    expect(topByVolume(corta, 10)).toHaveLength(2);
+  });
+
+  it("con la cadena vacía devuelve vacío", () => {
+    expect(topByVolume([], 10)).toHaveLength(0);
+  });
+
+  it("aguanta un lado ausente", () => {
+    const soloCalls = cadena.filter((x) => x.type === "call");
+    const out = topByVolume(soloCalls, 10);
+    expect(out).toHaveLength(10);
+    expect(out.every((x) => x.type === "call")).toBe(true);
+  });
+
+  it("el tope por defecto son 10 por lado", () => {
+    expect(ZERO_DTE_TOP_N).toBe(10);
+    expect(topByVolume(cadena)).toHaveLength(20);
   });
 });

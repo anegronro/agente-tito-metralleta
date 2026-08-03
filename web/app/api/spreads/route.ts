@@ -28,13 +28,14 @@ import { gexAnalysis } from "@/lib/gex";
 import {
   aggressiveBullishPctByTicker, callPremiumPctByTicker, combineBias,
   flowVote, gexVote, newsVote, zeroDteFlowVote,
+  SOURCE_WEIGHT, ZERO_DTE_WEIGHT, FULL_VOTE_PCT,
   type DirectionalContext,
 } from "@/lib/directional";
 import {
   SPREAD_PRESETS, buildSpreads, scoreSpread,
   type SpreadPresetId, type SpreadCandidate, type EarningsFlag,
 } from "@/lib/spreads";
-import { zeroDteWindow } from "@/lib/zeroDte";
+import { topByVolume, ZERO_DTE_TOP_N, zeroDteWindow } from "@/lib/zeroDte";
 import { WHEEL_UNIVERSE } from "@/lib/wheelUniverse";
 import type { Level } from "@/lib/levels";
 import type { Row } from "@/lib/types";
@@ -118,14 +119,26 @@ async function zeroDteFlowBias(now: Date): Promise<Map<string, number>> {
   }
 }
 
-/** Los campos de `Row` que `gexAnalysis` mira; el resto son relleno inocuo. */
-function rowsForGex(quotes: Awaited<ReturnType<typeof fetchSpreads>>["quotes"]): Row[] {
+/**
+ * Los campos de `Row` que `gexAnalysis` mira; el resto son relleno inocuo.
+ *
+ * `usarVolumen` es para 0DTE y no es un capricho: la fórmula del GEX pesa por
+ * `openInterest`, y en un contrato que vence HOY ese número se calculó anoche
+ * —habla de posiciones que a media sesión pueden estar ya cerradas—. Seleccionar
+ * por volumen y luego pesar por OI sería incoherente, así que en 0DTE se le pasa
+ * el volumen del día en ese campo. `gexAnalysis` no se toca: se le da el mejor
+ * proxy de tamaño de posición disponible en cada régimen.
+ */
+function rowsForGex(
+  quotes: Awaited<ReturnType<typeof fetchSpreads>>["quotes"],
+  usarVolumen = false,
+): Row[] {
   return quotes.map((q) => ({
     optionTicker: `${q.type}-${q.strike}-${q.expiration}`,
     contractType: q.type,
     expiration: q.expiration,
     strike: q.strike,
-    openInterest: q.openInterest,
+    openInterest: usarVolumen ? q.volume : q.openInterest,
     volume: q.volume,
     price: q.last,
     priceSource: "last_trade" as const,
@@ -192,8 +205,11 @@ export async function GET(req: Request) {
               dteMin: preset.dteMin, dteMax: preset.dteMax, now,
             });
             if (chain.spot == null || chain.quotes.length === 0) {
-              failed++;
-              send({ type: "step", label: `${sym.ticker}: sin cadena` });
+              // En 0DTE "sin cadena" es lo NORMAL, no un fallo: solo un puñado
+              // de subyacentes tiene vencimiento diario. Contarlo como error
+              // encendía el aviso de "falló más de la mitad" en cada escaneo.
+              if (!esZeroDte) failed++;
+              send({ type: "step", label: `${sym.ticker}: sin vencimiento hoy` });
               return;
             }
             const spot = chain.spot;
@@ -210,14 +226,25 @@ export async function GET(req: Request) {
             // no el de la cadena completa del panel Pro. Es a propósito —para
             // un spread a 40 días manda la gamma de esos vencimientos, no la
             // del viernes que viene— pero no son el mismo número.
-            const gex = gexAnalysis({ rows: rowsForGex(chain.quotes), closes, spot, now });
+            // En 0DTE el GEX se calcula SOLO con los 10 calls y 10 puts más
+            // negociados del día (petición explícita de Angel, jul 2026): ahí
+            // está la gamma que de verdad mueve al dealer. Ver `topByVolume`.
+            const paraGex = esZeroDte ? topByVolume(chain.quotes, ZERO_DTE_TOP_N) : chain.quotes;
+            const gex = gexAnalysis({
+              rows: rowsForGex(paraGex, esZeroDte), closes, spot, now,
+              allowZeroDte: esZeroDte,
+            });
 
             // ── Señal 3: flujo (del escaneo único de arriba) ──
             const callPct = flowPct.get(sym.ticker) ?? null;
 
             const ctx = combineBias(
               [
-                gexVote(gex.kingStrike, spot),
+                gexVote(
+                  gex.kingStrike, spot,
+                  esZeroDte ? ZERO_DTE_WEIGHT.gex : SOURCE_WEIGHT.gex,
+                  esZeroDte ? FULL_VOTE_PCT.zeroDte : FULL_VOTE_PCT.normal,
+                ),
                 esZeroDte ? zeroDteFlowVote(callPct) : flowVote(callPct),
               ],
               gex.kingStrike,
@@ -260,7 +287,7 @@ export async function GET(req: Request) {
         // suficiente como para mover el ranking, y Massive tiene un cupo muy
         // corto. Re-puntuar es barato porque `scoreSpread` es puro y no
         // necesita volver a pedir la cadena.
-        const objetivos = [...contexto.entries()]
+        const objetivos = preset.zeroDte ? [] : [...contexto.entries()]
           .filter(([t, c]) => c.ctx.strength >= NEWS_MIN_STRENGTH && all.some((x) => x.ticker === t && !x.blocked))
           .sort((a, b) => b[1].ctx.strength - a[1].ctx.strength)
           .slice(0, NEWS_BUDGET);

@@ -105,6 +105,33 @@ export function zeroDteWindow(now: Date): { open: boolean; hoursLeft: number; wh
  */
 export const MIN_ZERO_DTE_VOLUME = 250;
 
+/** Cuántos contratos de cada lado entran en el GEX del 0DTE. */
+export const ZERO_DTE_TOP_N = 10;
+
+/**
+ * Los `n` calls y `n` puts MÁS NEGOCIADOS del día.
+ *
+ * Es la selección con la que se calcula el GEX en modo 0DTE, y acota a
+ * propósito: en un vencimiento del día la gamma que de verdad mueve al dealer
+ * está donde hay volumen hoy, no repartida por toda la cadena. Los strikes
+ * lejanos sin operar meten ruido en el imán.
+ *
+ * CONSECUENCIA ASUMIDA: el imán que sale de aquí **no es** el del panel Pro,
+ * que usa la cadena entera. Son dos números distintos que responden a dos
+ * preguntas distintas, y no deberían compararse entre sí.
+ */
+export function topByVolume<T extends { type: "put" | "call"; volume: number }>(
+  quotes: T[],
+  n = ZERO_DTE_TOP_N,
+): T[] {
+  const porLado = (lado: "put" | "call") =>
+    quotes
+      .filter((q) => q.type === lado && q.volume > 0)
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, n);
+  return [...porLado("call"), ...porLado("put")];
+}
+
 export type ZeroDteBlock = "sin_bid" | "spread_ancho" | "volumen_bajo";
 
 /**

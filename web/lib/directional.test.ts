@@ -12,6 +12,8 @@ import {
   gexVote,
   newsVote,
   zeroDteFlowVote,
+  FULL_VOTE_PCT,
+  ZERO_DTE_WEIGHT,
 } from "./directional";
 import type { Level } from "./levels";
 import type { NewsBias } from "./news";
@@ -302,5 +304,36 @@ describe("checkPath — el nivel que ESTORBA a un débito", () => {
 
   it("camino despejado", () => {
     expect(checkPath({ spot: 100, target: 115, supports: [], resistances: [] }).fit).toBe("protegido");
+  });
+});
+
+describe("FULL_VOTE_PCT — la escala del imán depende del horizonte", () => {
+  it("en 0DTE la escala es mucho más fina", () => {
+    expect(FULL_VOTE_PCT.zeroDte).toBeLessThan(FULL_VOTE_PCT.normal);
+  });
+
+  it("un imán al 0,5% es mudo a 30 días y PLENO en 0DTE", () => {
+    // Es el fallo medido en producción: los once imanes del escaneo real
+    // estaban entre 0,0% y 0,9%, y con la escala de 30 días el GEX no hablaba.
+    const spot = 100, magnet = 100.5;
+    const largo = gexVote(magnet, spot, 0.65, FULL_VOTE_PCT.normal)!;
+    const corto = gexVote(magnet, spot, 0.65, FULL_VOTE_PCT.zeroDte)!;
+    expect(Math.abs(largo.value)).toBeLessThan(0.2);
+    expect(Math.abs(corto.value)).toBeCloseTo(1, 6);
+  });
+
+  it("con la escala fina un imán del 0,3% ya produce sesgo", () => {
+    const ctx = combineBias([gexVote(100.3, 100, 0.65, FULL_VOTE_PCT.zeroDte)]);
+    expect(ctx.bias).toBe("bullish");
+    expect(ctx.strength).toBeGreaterThan(20);
+  });
+
+  it("no divide por cero si le pasan una escala absurda", () => {
+    expect(Number.isFinite(gexVote(101, 100, 0.65, 0)!.value)).toBe(true);
+  });
+
+  it("el GEX pesa más en 0DTE que en el modo normal", () => {
+    expect(ZERO_DTE_WEIGHT.gex).toBeGreaterThan(SOURCE_WEIGHT.gex);
+    expect(ZERO_DTE_WEIGHT.noticias).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import { daysToExpiration } from "./occ";
 // bsGamma vive en blackScholes.ts (la Wheel usa las mismas primitivas).
 // Se re-exporta para no romper a quien la importa desde aquí.
 import { bsGamma } from "./blackScholes";
+import { fractionalDte } from "./zeroDte";
 export { bsGamma };
 
 /** IV de respaldo cuando no hay suficientes barras para estimar. */
@@ -89,6 +90,15 @@ export interface GexInput {
   trades?: TradeLite[];
   convictionScore?: number | null; // 0-10
   structureScore?: number | null;  // 0-10
+  /**
+   * Admite contratos que vencen HOY. Por defecto false y todo sigue igual.
+   *
+   * Sin esto el filtro `dte <= 0` de abajo se come la cadena ENTERA de un 0DTE
+   * y el análisis sale vacío: sin nodos, sin imán y sin régimen. Es el mismo
+   * fallo que ya apareció en `probAbove` y en el anualizado — el motor está
+   * escrito para días enteros y el 0 no lo degrada, lo rompe.
+   */
+  allowZeroDte?: boolean;
   lowLiquidity?: boolean;
   now: Date;
 }
@@ -133,8 +143,13 @@ export function gexAnalysis(input: GexInput): GexAnalysis {
     if (r.strike < lo || r.strike > hi) continue;
     if (r.openInterest <= 0) continue;
     const dte = daysToExpiration(r.expiration, now);
-    if (dte <= 0) continue;
-    const T = dte / 365;
+    if (dte < 0) continue;
+    if (dte === 0 && !input.allowZeroDte) continue;
+    // En 0DTE el tiempo se mide en horas de sesión: con T = 0 la gamma de
+    // Black-Scholes se dispara a infinito en el strike ATM y a cero en el
+    // resto, y el mapa de nodos deja de significar nada. Con gamma real de
+    // Schwab da igual, pero la cascada cae aquí cuando falta.
+    const T = dte === 0 ? fractionalDte(0, now) / 365 : dte / 365;
 
     // Cascada de calidad, de mejor a peor:
     //  1. Gamma REAL del contrato (Schwab). Es la del proveedor de datos, por
