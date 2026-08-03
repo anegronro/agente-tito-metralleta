@@ -11,7 +11,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/angel/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12</string>
-        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/schwab-push.py</string>
+        <string>/Users/angel/Proyectos/agente-tito-metralleta/web/scripts/schwab-push.py</string>
     </array>
 
     <!-- Cada 15 min. El access token de Schwab dura 30, así que hay un pase
@@ -22,8 +22,8 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/schwab-push.log</string>
+    <string>/Users/angel/Proyectos/agente-tito-metralleta/web/data/schwab-push.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/schwab-push.err.log</string>
+    <string>/Users/angel/Proyectos/agente-tito-metralleta/web/data/schwab-push.err.log</string>
 </dict>
 </plist>

@@ -12,7 +12,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/angel/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12</string>
-        <string>/Users/angel/Desktop/agente-tito-metralleta/web/scripts/run-watchlist-sync.py</string>
+        <string>/Users/angel/Proyectos/agente-tito-metralleta/web/scripts/run-watchlist-sync.py</string>
     </array>
 
     <!-- Sin WorkingDirectory: launchd tampoco podía hacer chdir al Desktop
@@ -30,8 +30,8 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/sync-launchd.log</string>
+    <string>/Users/angel/Proyectos/agente-tito-metralleta/web/data/sync-launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/angel/Desktop/agente-tito-metralleta/web/data/sync-launchd.log</string>
+    <string>/Users/angel/Proyectos/agente-tito-metralleta/web/data/sync-launchd.log</string>
 </dict>
 </plist>
