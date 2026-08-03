@@ -152,6 +152,23 @@ Traer lo nuevo de Víctor: `git fetch upstream && git merge upstream/main`.
 - **Blindaje de secretos por nombre**, aunque `.gitignore` no los cubra: si un
   archivo nuevo huele a credencial, **aborta el commit entero** en vez de
   filtrarlo. Verificado con un cebo (`prueba-token.txt` → ABORTADO).
+- **EL PROYECTO YA NO VIVE EN `~/Desktop` (ago 2026).** Está en
+  `~/Proyectos/agente-tito-metralleta`. El Desktop de Angel está **sincronizado
+  con iCloud**, y eso rompía dos cosas a la vez:
+  1. **launchd no podía acceder a la carpeta**: los tres jobs (`gitautosync`,
+     `schwab-push`, `watchlist-sync`) llevaban días con `exit 78 (EX_CONFIG)` y
+     **924 intentos**. La pista definitiva fue que tras un `kickstart` los
+     archivos de log NO cambiaban de fecha: launchd fallaba antes de arrancar el
+     proceso, al no poder abrir el `StandardOutPath` — que también estaba en el
+     Desktop. Nada que ver con el script.
+  2. **iCloud creaba copias de conflicto** (`archivo 2.ts`, `archivo 3.ts`) en
+     `.next/`, y esas rompían `tsc` con "Duplicate identifier" cada pocos
+     minutos.
+  Mover la carpeta arregló las dos. Solo hubo que actualizar los 3 plists: los
+  scripts se localizan solos por `__file__` y `deploy-vps.sh` usa `BASH_SOURCE`.
+  **Ojo al mover:** `mv` se cuelga (>10 min) porque iCloud materializa los 575 MB
+  de `node_modules` y `.next`. Se copia con `rsync -a --exclude node_modules/
+  --exclude .next/` y se reinstalan las dependencias en destino.
 - **Gotcha de TCC:** el plist invoca el intérprete de uv
   (`~/.local/share/uv/python/.../python3.12`), no `/usr/bin/python3`. Este
   último no tiene Acceso a Disco Completo y muere con `exit 2` en bucle,
