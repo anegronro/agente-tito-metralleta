@@ -1,0 +1,25 @@
+{
+  "updatedAt": "2026-07-27T21:41:41.869Z",
+  "items": [
+    {
+      "ticker": "XLF",
+      "broker": "robinhood",
+      "addedAt": "2026-07-27T19:44:36.242Z",
+      "syncedAt": "2026-07-27T21:41:41.869Z",
+      "symbol": "XLF270319P00052000",
+      "type": "put",
+      "strike": 52,
+      "expiration": "2027-03-19"
+    },
+    {
+      "ticker": "NVDA",
+      "broker": "robinhood",
+      "addedAt": "2026-07-27T21:40:50.930Z",
+      "syncedAt": "2026-07-27T21:41:41.869Z",
+      "symbol": "NVDA261016C00180000",
+      "type": "call",
+      "strike": 180,
+      "expiration": "2026-10-16"
+    }
+  ]
+}
